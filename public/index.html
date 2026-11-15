@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Padelplanner Assen</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --tekst:#1c2230; --zacht:#5d6678; --lijn:#dde1e8; --accent:#1f6feb; --goed:#12805c; --let:#9a6700; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12151b; --card:#1b202a; --tekst:#e8ebf1; --zacht:#9aa3b5; --lijn:#2c3342; --accent:#5b9dff; --goed:#3ccf9b; --let:#e3b341; }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--tekst); }
+  header, main, .demo { max-width: 900px; margin: 0 auto; padding: 0 16px; }
+  header { padding-top: 24px; }
+  h1 { margin:0 0 4px; font-size: 1.6rem; }
+  h2 { margin:0 0 12px; font-size: 1.15rem; }
+  .sub { margin:0; color:var(--zacht); }
+  .demo { margin-top:16px; }
+  .demo p { margin:0; padding:10px 12px; border:1px solid var(--let); border-radius:8px; color:var(--let); font-size:.9rem; }
+  section { background:var(--card); border:1px solid var(--lijn); border-radius:12px; padding:16px; margin:16px 0; }
+  fieldset { border:0; padding:0; margin:0 0 16px; }
+  legend { font-weight:600; padding:0; margin-bottom:6px; }
+  .hint { color:var(--zacht); font-size:.88rem; margin:0 0 8px; }
+  label.optie { display:inline-flex; align-items:center; gap:6px; margin:0 14px 6px 0; cursor:pointer; }
+  input[type=text], input[type=email], input[type=password], select { font:inherit; padding:8px 10px; border:1px solid var(--lijn); border-radius:8px; background:var(--bg); color:inherit; width:100%; max-width:320px; }
+  input[type=checkbox], input[type=radio] { width:18px; height:18px; flex:none; }
+  .scroll { overflow-x:auto; }
+  button { font:inherit; padding:10px 16px; border-radius:8px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; }
+  button.rustig { background:transparent; color:var(--accent); }
+  button.link { background:none; border:0; padding:0; color:var(--accent); text-decoration:underline; font-size:.9rem; }
+  .melding { margin-top:10px; min-height:1.3em; font-size:.92rem; }
+  .fout { color:#d1242f; } .ok { color:var(--goed); }
+  .moment { border:1px solid var(--lijn); border-radius:10px; padding:12px; margin-bottom:10px; }
+  .moment h3 { margin:0 0 6px; font-size:1.02rem; }
+  .moment ul { margin:6px 0 0; padding-left:18px; }
+  .wie { margin:4px 0 6px; }
+  .wie strong { display:block; font-size:.88rem; margin-bottom:4px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { font-size:.88rem; padding:2px 10px; border-radius:99px; background:color-mix(in srgb, var(--accent) 12%, transparent); border:1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+  .chip.jij { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .chip small { opacity:.75; }
+  .badge { display:inline-block; font-size:.75rem; padding:1px 8px; border-radius:99px; border:1px solid var(--goed); color:var(--goed); margin-left:6px; }
+  .let { color:var(--let); }
+  table.banen { width:100%; border-collapse:collapse; font-size:.92rem; }
+  table.banen th, table.banen td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--lijn); vertical-align:top; }
+  tr.goedkoopst td { background:color-mix(in srgb, var(--goed) 12%, transparent); }
+  .rij { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  .rij > div { flex:1 1 200px; }
+  .rij label { display:block; }
+  .tabs { display:flex; gap:8px; margin-bottom:12px; }
+  .tabs button[aria-pressed=false] { background:transparent; color:var(--accent); }
+  .ingelogd { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+
+  /* Beschikbaarheid per dag */
+  .dag { border-bottom:1px solid var(--lijn); padding:10px 0; }
+  .dag { display:grid; grid-template-columns:110px 1fr; gap:4px 12px; align-items:start; }
+  @media (max-width: 560px) { .dag { grid-template-columns:1fr; } }
+  .dag > strong { margin:0; padding-top:4px; }
+  .dagtijden { display:flex; flex-direction:column; align-items:flex-start; gap:6px; }
+  .tijdvakken { display:flex; flex-direction:column; gap:10px; width:100%; }
+  .tijdvakken:empty { display:none; }
+  .leeg { color:var(--zacht); font-size:.9rem; padding-top:4px; }
+  .tijdvak { display:grid; grid-template-columns:1fr auto auto; align-items:start; gap:10px; width:100%; }
+  .tijdvak .tijden { font-size:.9rem; font-variant-numeric:tabular-nums; padding-top:3px; white-space:nowrap; }
+  .tijdvak .weg { padding:0 9px; line-height:26px; font-size:1.1rem; background:transparent; color:var(--zacht); border-color:var(--lijn); }
+  .balk { min-width:0; }
+  .schaal { position:relative; height:16px; margin:0 9px; font-size:.72rem; color:var(--zacht); }
+  .schaal span { position:absolute; transform:translateX(-50%); white-space:nowrap; }
+  .schuif { position:relative; height:28px; --van:0; --tot:1; --n:1; }
+  .schuif .spoor { position:absolute; left:9px; right:9px; top:12px; height:4px; border-radius:2px; background:var(--lijn); }
+  .schuif .spoor::after { content:''; position:absolute; top:0; bottom:0; border-radius:2px; background:var(--accent);
+    left:calc(var(--van) / var(--n) * 100%); right:calc((var(--n) - var(--tot)) / var(--n) * 100%); }
+  .schuif input[type=range] { position:absolute; inset:0; width:100%; height:28px; margin:0; background:none; pointer-events:none; -webkit-appearance:none; appearance:none; }
+  .schuif input[type=range]::-webkit-slider-runnable-track { background:none; height:28px; }
+  .schuif input[type=range]::-moz-range-track { background:none; }
+  .schuif input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; pointer-events:auto; width:18px; height:18px; margin-top:5px; border-radius:50%; background:var(--card); border:2px solid var(--accent); cursor:pointer; }
+  .schuif input[type=range]::-moz-range-thumb { pointer-events:auto; width:14px; height:14px; border-radius:50%; background:var(--card); border:2px solid var(--accent); cursor:pointer; }
+  .week { margin:14px 0 6px; font-size:1rem; color:var(--zacht); }
+  .week:first-child { margin-top:0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Padelplanner Assen</h1>
+  <p class="sub">Vind een viertal én een baan die past, in Assen en omgeving.</p>
+</header>
+<div class="demo"><p>Demoversie: vrije banen en de meeste prijzen zijn voorbeeldwaarden. Echte beschikbaarheid komt later via koppelingen met de clubs.</p></div>
+
+<main>
+  <section id="login-sectie">
+    <h2>Inloggen</h2>
+    <div id="uitgelogd">
+      <p class="hint">Log in om je beschikbaarheid door te geven en te zien wie wanneer kan spelen.</p>
+      <div class="tabs" id="tabs">
+        <button type="button" id="tab-login" aria-pressed="true">Inloggen</button>
+        <button type="button" id="tab-signup" aria-pressed="false">Account maken</button>
+      </div>
+      <form id="login-form" autocomplete="on">
+        <div class="rij">
+          <div id="signup-naam-veld" hidden>
+            <label for="signup-naam"><strong>Je naam</strong></label>
+            <input type="text" id="signup-naam" maxlength="40" autocomplete="name">
+          </div>
+          <div>
+            <label for="email"><strong>E-mailadres</strong></label>
+            <input type="email" id="email" required autocomplete="email">
+          </div>
+          <div>
+            <label for="wachtwoord"><strong>Wachtwoord</strong></label>
+            <input type="password" id="wachtwoord" required minlength="6" autocomplete="current-password">
+          </div>
+        </div>
+        <button type="submit" id="login-knop">Inloggen</button>
+        <button type="button" class="link" id="vergeten">Wachtwoord vergeten?</button>
+      </form>
+    </div>
+    <form id="nieuw-wachtwoord" hidden>
+      <p class="hint" id="nieuw-wachtwoord-uitleg">Kies een nieuw wachtwoord.</p>
+      <div class="rij"><div>
+        <label for="nieuw-ww"><strong>Nieuw wachtwoord</strong></label>
+        <input type="password" id="nieuw-ww" required minlength="6" autocomplete="new-password">
+      </div></div>
+      <button type="submit">Wachtwoord opslaan</button>
+    </form>
+    <div id="ingelogd" class="ingelogd" hidden>
+      <span>Ingelogd als <strong id="wie-ben-ik"></strong></span>
+      <button type="button" class="rustig" id="uitloggen">Uitloggen</button>
+    </div>
+    <div class="melding" id="login-melding" role="status"></div>
+  </section>
+
+  <section id="formulier-sectie" hidden>
+    <h2>1. Jouw gegevens en beschikbaarheid</h2>
+    <form id="formulier" autocomplete="off">
+      <div class="rij">
+        <div>
+          <label for="naam"><strong>Je naam</strong></label>
+          <input type="text" id="naam" maxlength="40" required>
+        </div>
+        <div>
+          <label for="groepscode"><strong>Groepscode</strong></label>
+          <input type="text" id="groepscode" placeholder="Alleen nodig als de beheerder die heeft ingesteld">
+        </div>
+      </div>
+
+      <fieldset id="niveau-veld">
+        <legend>Op welk niveau speel je ongeveer?</legend>
+      </fieldset>
+      <fieldset id="wens-veld">
+        <legend>Met welk niveau wil je spelen?</legend>
+        <p class="hint">Je mag meerdere ranges aanvinken.</p>
+      </fieldset>
+      <fieldset id="duur-veld">
+        <legend>Hoe lang wil je spelen?</legend>
+        <p class="hint">Kies beide om meer opties te vinden.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Hoe vaak wil je met de groep spelen?</legend>
+        <select id="frequentie"></select>
+      </fieldset>
+      <fieldset>
+        <legend>Wanneer kun je de komende twee weken spelen?</legend>
+        <p class="hint">Klik bij een dag op <em>Tijd kiezen</em> en schuif de bolletjes naar de tijd waarop je kunt beginnen en de tijd waarop je klaar moet zijn (tussen 8:30 en 22:00). Kun je op een dag op twee momenten, bijvoorbeeld 's ochtends en 's avonds? Klik dan op <em>Nog een moment kiezen op deze dag</em>. De planner zoekt daarbinnen een starttijd voor 1 uur of 1,5 uur. De laatste starttijd is 20:30.</p>
+        <div id="raster"></div>
+      </fieldset>
+      <button type="submit">Opslaan</button>
+      <div class="melding" id="opslaan-melding" role="status"></div>
+    </form>
+  </section>
+
+  <section id="planner-sectie" hidden>
+    <h2>2. Beste momenten en wie er kan</h2>
+    <p class="hint" id="planner-info"></p>
+    <div id="planner"></div>
+    <button type="button" class="rustig" id="ververs">Vernieuw</button>
+  </section>
+
+  <section>
+    <h2 id="banen-kop">3. Banen en prijzen per tijdstip</h2>
+    <div class="rij">
+      <div><label for="kies-dag"><strong>Dag</strong></label><select id="kies-dag"></select></div>
+      <div><label for="kies-slot"><strong>Starttijd</strong></label><select id="kies-slot"></select></div>
+    </div>
+    <div class="scroll"><table class="banen" id="banen"></table></div>
+    <p class="hint">Alleen clubs en starttijden met een vrije of nog niet boekbare baan staan erin. Prijs per baan en per persoon (4 spelers). De goedkoopste club met een vrije baan is gemarkeerd.</p>
+  </section>
+</main>
+
+<script src="planner.js"></script>
+<script type="module">
+import './auth.js';
+const Auth = window.Auth;
+const P = window.Planner;
+const today = new Date();
+const dagen = P.volgendeDagen(today);
+let clubs = [];
+let responses = [];
+let gebruiker = null;
+let inviteToken = null;
+
+const $ = (id) => document.getElementById(id);
+function h(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === 'class') e.className = v;
+    else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const kid of kids.flat()) if (kid != null) e.append(kid.nodeType ? kid : document.createTextNode(kid));
+  return e;
+}
+const bewaar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const lees = (k) => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
+const euro = (n) => n.toLocaleString('nl-NL', { style: 'currency', currency: 'EUR' });
+const dagLabel = (key) => P.parseKey(key).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
+const slotLabel = (id) => P.SLOTS.find((s) => s.id === id).label;
+const durenTekst = (duren) => duren.map((d) => (d === '60' ? '1 uur' : '1,5 uur')).join(' of ');
+function melding(id, tekst, soort) { const m = $(id); m.textContent = tekst || ''; m.className = 'melding' + (soort ? ' ' + soort : ''); }
+
+// ---- Formulier opbouwen ----
+function optie(type, name, value, label) {
+  return h('label', { class: 'optie' }, h('input', { type, name, value }), label);
+}
+P.NIVEAUS.forEach((n) => $('niveau-veld').append(optie('radio', 'niveau', n.id, n.label)));
+P.NIVEAUS.forEach((n) => $('wens-veld').append(optie('checkbox', 'wens', n.id, n.label)));
+P.DUREN.forEach((d) => $('duur-veld').append(optie('checkbox', 'duur', d.id, d.label)));
+P.FREQUENTIES.forEach((f) => $('frequentie').append(h('option', { value: f.id }, f.label)));
+$('frequentie').value = 'wanneer-het-lukt';
+
+// ---- Schuifbalken: per dag een of meer tijden van..tot ----
+const MIN_STAPPEN = 2; // minstens een uur
+const DAG_VAN = '08:30', DAG_TOT = '22:00';
+const BASIS = P.naarMin(DAG_VAN);
+const N = (P.naarMin(DAG_TOT) - BASIS) / 30;
+const tijd = (i) => P.naarTijd(BASIS + i * 30);
+const idx = (t) => (P.naarMin(t) - BASIS) / 30;
+const SCHAAL = ['08:30', '12:00', '15:00', '18:00', '20:30', '22:00'];
+const dagRijen = {};
+let laatste = [idx('19:00'), idx('21:00')];
+
+function tijdvak(d, rij, lo, hi) {
+  const van = h('input', { type: 'range', min: 0, max: N, step: 1, value: lo, 'aria-label': dagLabel(d) + ', vanaf' });
+  const tot = h('input', { type: 'range', min: 0, max: N, step: 1, value: hi, 'aria-label': dagLabel(d) + ', tot' });
+  const schuif = h('div', { class: 'schuif' }, h('div', { class: 'spoor' }), van, tot);
+  schuif.style.setProperty('--n', N);
+  const schaal = h('div', { class: 'schaal', 'aria-hidden': 'true' },
+    SCHAAL.map((t) => h('span', { style: 'left:' + (idx(t) / N * 100) + '%' }, t.replace(/^0/, ''))));
+  const tijden = h('span', { class: 'tijden' });
+  const weg = h('button', { type: 'button', class: 'weg', 'aria-label': 'Deze tijd verwijderen', title: 'Verwijderen' }, '×');
+  const el = h('div', { class: 'tijdvak' }, h('div', { class: 'balk' }, schuif, schaal), tijden, weg);
+  const c = { el };
+  c.toon = () => {
+    const a = +van.value, b = +tot.value;
+    schuif.style.setProperty('--van', a);
+    schuif.style.setProperty('--tot', b);
+    van.setAttribute('aria-valuetext', tijd(a));
+    tot.setAttribute('aria-valuetext', tijd(b));
+    tijden.textContent = tijd(a) + ' – ' + tijd(b);
+  };
+  c.blokken = () => P.reeks(tijd(+van.value), tijd(+tot.value));
+  function schuiven(e) {
+    let a = +van.value, b = +tot.value;
+    if (b - a < MIN_STAPPEN) {
+      if (e.target === van) { b = Math.min(N, a + MIN_STAPPEN); a = b - MIN_STAPPEN; }
+      else { a = Math.max(0, b - MIN_STAPPEN); b = a + MIN_STAPPEN; }
+      van.value = a; tot.value = b;
+    }
+    laatste = [a, b];
+    c.toon();
+  }
+  van.addEventListener('input', schuiven);
+  tot.addEventListener('input', schuiven);
+  weg.addEventListener('click', () => { rij.lijst = rij.lijst.filter((x) => x !== c); el.remove(); rij.toon(); });
+  c.toon();
+  return c;
+}
+
+function dagRij(d) {
+  const box = h('div', { class: 'tijdvakken' });
+  const leeg = h('span', { class: 'leeg' }, 'Niet beschikbaar');
+  const knop = h('button', { type: 'button', class: 'link' });
+  const rij = { lijst: [] };
+  rij.toon = () => {
+    leeg.hidden = rij.lijst.length > 0;
+    knop.textContent = rij.lijst.length ? '+ Nog een moment kiezen op deze dag' : '+ Tijd kiezen';
+  };
+  rij.voegToe = (lo, hi) => {
+    const c = tijdvak(d, rij, lo, hi);
+    rij.lijst.push(c);
+    box.append(c.el);
+    rij.toon();
+    return c;
+  };
+  rij.leeg = () => { rij.lijst.forEach((c) => c.el.remove()); rij.lijst = []; rij.toon(); };
+  rij.blokken = () => {
+    const set = new Set(rij.lijst.flatMap((c) => c.blokken()));
+    return P.BLOKKEN.filter((b) => set.has(b));
+  };
+  rij.vul = (blokken) => {
+    rij.leeg();
+    // Aaneengesloten blokken worden één tijd met een schuifbalk.
+    const ix = blokken.map(idx).filter((i) => i >= 0 && i < N).sort((a, b) => a - b);
+    for (let i = 0; i < ix.length; ) {
+      let j = i;
+      while (j + 1 < ix.length && ix[j + 1] === ix[j] + 1) j++;
+      let lo = ix[i], hi = ix[j] + 1;
+      if (hi - lo < MIN_STAPPEN) { hi = Math.min(N, lo + MIN_STAPPEN); lo = hi - MIN_STAPPEN; }
+      rij.voegToe(lo, hi);
+      i = j + 1;
+    }
+  };
+  knop.addEventListener('click', () => {
+    let [lo, hi] = laatste;
+    // Een extra moment op dezelfde dag begint na het vorige, als dat past.
+    const vorige = rij.lijst[rij.lijst.length - 1];
+    if (vorige) {
+      const b = rij.lijst.reduce((m, c) => Math.max(m, idx(c.blokken().slice(-1)[0]) + 1), 0);
+      const breedte = Math.max(MIN_STAPPEN, hi - lo);
+      if (b + 1 + breedte <= N) { lo = b + 1; hi = lo + breedte; }
+      else { lo = 0; hi = breedte; }
+    }
+    rij.voegToe(lo, hi);
+  });
+  rij.toon();
+  dagRijen[d] = rij;
+  return h('div', { class: 'dag' }, h('strong', {}, dagLabel(d)), h('div', { class: 'dagtijden' }, leeg, box, knop));
+}
+dagen.forEach((d) => $('raster').append(dagRij(d)));
+
+// ---- Selecties voor banenoverzicht ----
+dagen.forEach((d) => $('kies-dag').append(h('option', { value: d }, dagLabel(d))));
+
+function vulFormulier(r) {
+  r = P.normaliseer(r);
+  $('naam').value = r.naam;
+  document.querySelectorAll('input[name=niveau]').forEach((i) => (i.checked = i.value === r.niveau));
+  document.querySelectorAll('input[name=wens]').forEach((i) => (i.checked = r.wensNiveaus.includes(i.value)));
+  document.querySelectorAll('input[name=duur]').forEach((i) => (i.checked = r.duren.includes(i.value)));
+  $('frequentie').value = r.frequentie;
+  dagen.forEach((d) => dagRijen[d].vul(r.beschikbaar[d] || []));
+}
+
+// ---- Data laden ----
+async function laadClubs() {
+  const r = await fetch('clubs.json');
+  clubs = (await r.json()).clubs;
+}
+async function api(opties) {
+  try { await Auth.refreshSession(); } catch (e) {}
+  const headers = Object.assign({ 'x-groepscode': $('groepscode').value.trim() }, (opties && opties.headers) || {});
+  return fetch('/api/responses', Object.assign({}, opties, { headers, credentials: 'same-origin' }));
+}
+async function laadAntwoorden() {
+  $('planner-info').textContent = '';
+  if (!gebruiker) { responses = []; return; }
+  try {
+    const r = await api();
+    const data = await r.json();
+    if (!r.ok) { $('planner-info').textContent = data.fout || 'Antwoorden laden mislukt.'; responses = []; return; }
+    responses = data.responses;
+  } catch (e) {
+    $('planner-info').textContent = 'De antwoorden kunnen alleen geladen worden op de Netlify-site.';
+    responses = [];
+  }
+}
+const eigen = () => responses.find((r) => r.eigen);
+
+// ---- Prijstekst ----
+function prijsTekst(club) {
+  const a = P.prijs(club, 60), b = P.prijs(club, 90);
+  if (!a) return 'prijs onbekend';
+  const demo = club.prijsBron === 'demo' ? ' (demo)' : '';
+  return '1 uur: ' + euro(a.perBaan) + ' per baan, ' + euro(a.perPersoon) + ' p.p. · 1,5 uur: ' + euro(b.perBaan) + ' per baan, ' + euro(b.perPersoon) + ' p.p.' + demo;
+}
+function statusTekst(club, st) {
+  if (st.soort === 'vrij') return st.vrij + (st.vrij === 1 ? ' baan vrij' : ' banen vrij') + ' (demo)';
+  if (st.soort === 'bezet') return 'bezet (demo)';
+  const wanneer = st.dagenTotOpening <= 0 ? 'vandaag' : st.dagenTotOpening === 1 ? 'morgen' : 'over ' + st.dagenTotOpening + ' dagen (' + dagLabel(st.opentOp) + ')';
+  const tijd = club.opentOm ? ' om ' + club.opentOm : '';
+  return 'nog niet boekbaar, opent ' + wanneer + tijd + (club.horizonBevestigd ? '' : ' (horizon van ' + club.horizonDagen + ' dagen is een aanname)');
+}
+
+// ---- Planner tonen ----
+function toonPlanner() {
+  const box = $('planner');
+  box.replaceChildren();
+  if (!gebruiker) return;
+  if (!responses.length) { if (!$('planner-info').textContent) $('planner-info').textContent = 'Nog geen antwoorden.'; return; }
+  const twee = responses.filter((r) => r.frequentie === '2x-per-week').length;
+  $('planner-info').textContent = responses.length + ' speler(s) hebben gereageerd' +
+    (twee ? ', waarvan ' + twee + ' graag 2x per week speelt' : '') +
+    '. Per week staan hieronder de twee beste momenten op verschillende dagen, met wie er dan kan spelen.';
+  const weken = P.planPerWeek(responses, clubs, today, 2);
+  if (!weken.length) {
+    box.append(h('p', {}, 'Er is nog geen moment waarop vier mensen kunnen die qua niveau en speelduur bij elkaar passen. Meer dagen, ruimere tijden, meer niveau-ranges of beide speelduren aanvinken helpt.'));
+    return;
+  }
+  weken.forEach((w) => {
+    const eind = P.parseKey(w.week); eind.setDate(eind.getDate() + 6);
+    box.append(h('h3', { class: 'week' }, 'Week van ' + dagLabel(w.week) + ' t/m ' + dagLabel(P.dagKey(eind))));
+    w.momenten.forEach((m, i) => toonMoment(box, m, i));
+  });
+}
+
+function toonMoment(box, m, i) {
+  const mij = eigen();
+  const alt = m.alternatieven && m.alternatieven.length
+    ? 'Met dezelfde spelers kan starten ook om ' + m.alternatieven.join(', ').replace(/, ([^,]*)$/, ' of $1') + '.'
+    : null;
+  const chips = m.spelers.map((naam) => {
+    const duren = m.spelerDuren[naam] || [];
+    const extra = duren.length === 1 ? ' (' + durenTekst(duren) + ')' : '';
+    const jij = mij && mij.naam === naam;
+    return h('span', { class: 'chip' + (jij ? ' jij' : '') }, naam, jij ? ' (jij)' : '', extra ? h('small', {}, extra) : null);
+  });
+  box.append(h('div', { class: 'moment' },
+    h('h3', {}, (i === 0 ? 'Eerste moment: ' : 'Tweede moment: ') + dagLabel(m.datum) + ', start ' + slotLabel(m.slot.id)),
+    h('div', { class: 'wie' }, h('strong', {}, 'Wie kan er spelen (' + m.spelers.length + ')'), h('div', { class: 'chips' }, chips)),
+    h('div', { class: 'hint' }, 'Voorbeeldviertal: ' + m.voorbeeldGroep.join(', ') + ' (speelduur: ' + durenTekst(m.duren) + ')'),
+    alt ? h('div', { class: 'hint' }, alt) : null,
+    h('ul', {}, m.opties.slice(0, 3).map((o) => h('li', {}, h('strong', {}, o.club.naam), ': ', statusTekst(o.club, o.status), ' – ', prijsTekst(o.club))))));
+}
+
+// ---- Banenoverzicht ----
+// Alleen starttijden waarop minstens één club niet bezet is.
+const nietBezet = (st) => st.soort === 'vrij' || st.soort === 'nog-niet';
+function vulStarttijden() {
+  const dag = $('kies-dag').value, oud = $('kies-slot').value || '19:00';
+  const tijden = P.SLOTS.filter((s) => clubs.some((c) => nietBezet(P.status(c, dag, s.id, today))));
+  $('kies-slot').replaceChildren(...tijden.map((s) => h('option', { value: s.id }, s.label)));
+  if (tijden.length) $('kies-slot').value = tijden.some((s) => s.id === oud) ? oud : tijden[0].id;
+}
+function toonBanen() {
+  const dag = $('kies-dag').value, slot = $('kies-slot').value;
+  if (!slot) { $('banen').replaceChildren(h('tbody', {}, h('tr', {}, h('td', {}, 'Op deze dag is alles bezet.')))); return; }
+  const rijen = clubs.map((c) => ({ c, st: P.status(c, dag, slot, today), p: P.prijs(c, 60) })).filter((r) => nietBezet(r.st));
+  const kandidaten = rijen.filter((r) => r.st.soort === 'vrij' && r.p);
+  const min = kandidaten.length ? Math.min(...kandidaten.map((r) => r.p.perPersoon)) : null;
+  $('banen').replaceChildren(
+    h('thead', {}, h('tr', {}, h('th', {}, 'Club'), h('th', {}, 'Status'), h('th', {}, 'Prijs'))),
+    h('tbody', {}, rijen.map((r) => {
+      const goedkoopst = min != null && r.st.soort === 'vrij' && r.p && r.p.perPersoon === min;
+      return h('tr', { class: goedkoopst ? 'goedkoopst' : '' },
+        h('td', {}, h('a', { href: r.c.boeken, target: '_blank', rel: 'noopener' }, r.c.naam), goedkoopst ? h('span', { class: 'badge' }, 'goedkoopst') : null),
+        h('td', {}, statusTekst(r.c, r.st)),
+        h('td', {}, prijsTekst(r.c)));
+    })));
+}
+
+// ---- Opslaan ----
+$('formulier').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  melding('opslaan-melding');
+  const niveau = (document.querySelector('input[name=niveau]:checked') || {}).value;
+  const wensNiveaus = [...document.querySelectorAll('input[name=wens]:checked')].map((i) => i.value);
+  const duren = [...document.querySelectorAll('input[name=duur]:checked')].map((i) => i.value);
+  const beschikbaar = {};
+  dagen.forEach((d) => {
+    const blokken = dagRijen[d].blokken();
+    if (blokken.length) beschikbaar[d] = blokken;
+  });
+  const naam = $('naam').value.trim();
+  if (!naam) return melding('opslaan-melding', 'Vul je naam in.', 'fout');
+  if (!niveau) return melding('opslaan-melding', 'Kies op welk niveau je speelt.', 'fout');
+  if (!wensNiveaus.length) return melding('opslaan-melding', 'Kies met welk niveau je wilt spelen.', 'fout');
+  if (!duren.length) return melding('opslaan-melding', 'Kies minstens één speelduur (1 uur en/of 1,5 uur).', 'fout');
+  if (!Object.keys(beschikbaar).length) return melding('opslaan-melding', 'Kies minstens één dag en tijd waarop je kunt spelen.', 'fout');
+  try {
+    const r = await api({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ naam, niveau, wensNiveaus, duren, frequentie: $('frequentie').value, beschikbaar })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');
+    bewaar('padel-code', $('groepscode').value.trim());
+    melding('opslaan-melding', 'Opgeslagen. Je kunt later terugkomen om je antwoorden aan te passen.', 'ok');
+    await laadAntwoorden(); toonPlanner();
+  } catch (err) {
+    melding('opslaan-melding', err.message, 'fout');
+  }
+});
+
+// ---- Inloggen ----
+let modus = 'login';
+function zetModus(m) {
+  modus = m;
+  $('tab-login').setAttribute('aria-pressed', String(m === 'login'));
+  $('tab-signup').setAttribute('aria-pressed', String(m === 'signup'));
+  $('signup-naam-veld').hidden = m !== 'signup';
+  $('login-knop').textContent = m === 'signup' ? 'Account maken' : 'Inloggen';
+  $('wachtwoord').autocomplete = m === 'signup' ? 'new-password' : 'current-password';
+  $('vergeten').hidden = m === 'signup';
+  melding('login-melding');
+}
+$('tab-login').addEventListener('click', () => zetModus('login'));
+$('tab-signup').addEventListener('click', () => zetModus('signup'));
+
+function authFout(err) {
+  if (err instanceof Auth.MissingIdentityError) return 'Inloggen werkt alleen op de Netlify-site.';
+  if (err instanceof Auth.AuthError) {
+    if (err.status === 401) return 'E-mailadres of wachtwoord klopt niet, of je e-mailadres is nog niet bevestigd.';
+    if (err.status === 403) return 'Zelf een account maken is uitgeschakeld. Vraag de beheerder om een uitnodiging.';
+    if (err.status === 422) return 'Controleer je e-mailadres en kies een wachtwoord van minstens 6 tekens.';
+    return err.message;
+  }
+  return 'Er ging iets mis. Probeer het opnieuw.';
+}
+
+$('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('email').value.trim(), ww = $('wachtwoord').value;
+  try {
+    if (modus === 'signup') {
+      const naam = $('signup-naam').value.trim();
+      if (!naam) return melding('login-melding', 'Vul je naam in.', 'fout');
+      const u = await Auth.signup(email, ww, { full_name: naam });
+      if (u.confirmedAt) { await naIngelogd(u); melding('login-melding', 'Account gemaakt. Je bent ingelogd.', 'ok'); }
+      else melding('login-melding', 'Bijna klaar: bevestig je account via de link in de e-mail die we je hebben gestuurd.', 'ok');
+    } else {
+      await naIngelogd(await Auth.login(email, ww));
+    }
+    $('wachtwoord').value = '';
+  } catch (err) {
+    melding('login-melding', authFout(err), 'fout');
+  }
+});
+
+$('vergeten').addEventListener('click', async () => {
+  const email = $('email').value.trim();
+  if (!email) return melding('login-melding', 'Vul eerst je e-mailadres in.', 'fout');
+  try {
+    await Auth.requestPasswordRecovery(email);
+    melding('login-melding', 'Als dit adres bekend is, ontvang je een e-mail om een nieuw wachtwoord te kiezen.', 'ok');
+  } catch (err) { melding('login-melding', authFout(err), 'fout'); }
+});
+
+$('nieuw-wachtwoord').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const ww = $('nieuw-ww').value;
+  try {
+    const u = inviteToken ? await Auth.acceptInvite(inviteToken, ww) : await Auth.updateUser({ password: ww });
+    inviteToken = null;
+    $('nieuw-wachtwoord').hidden = true;
+    $('nieuw-ww').value = '';
+    await naIngelogd(u);
+    melding('login-melding', 'Je wachtwoord is opgeslagen.', 'ok');
+  } catch (err) { melding('login-melding', authFout(err), 'fout'); }
+});
+
+$('uitloggen').addEventListener('click', async () => {
+  try { await Auth.logout(); } catch (e) {}
+  gebruiker = null;
+  responses = [];
+  toonAuth();
+});
+
+function toonAuth() {
+  const aan = !!gebruiker;
+  $('uitgelogd').hidden = aan || !$('nieuw-wachtwoord').hidden;
+  $('ingelogd').hidden = !aan;
+  $('formulier-sectie').hidden = !aan;
+  $('planner-sectie').hidden = !aan;
+  $('banen-kop').textContent = (aan ? '3. ' : '') + 'Banen en prijzen per tijdstip';
+  if (aan) $('wie-ben-ik').textContent = gebruiker.name || gebruiker.email;
+  toonPlanner();
+}
+
+async function naIngelogd(u) {
+  gebruiker = u || (await Auth.getUser());
+  if (!gebruiker) return toonAuth();
+  melding('login-melding');
+  toonAuth();
+  await laadAntwoorden();
+  const mijn = eigen();
+  if (mijn) vulFormulier(mijn);
+  else if (!$('naam').value) $('naam').value = gebruiker.name || '';
+  toonPlanner();
+}
+
+Auth.onAuthChange((event, u) => {
+  if (event === 'logout' && gebruiker) { gebruiker = null; responses = []; toonAuth(); }
+});
+
+$('groepscode').addEventListener('change', async () => { await laadAntwoorden(); toonPlanner(); });
+$('ververs').addEventListener('click', async () => { await laadAntwoorden(); toonPlanner(); });
+$('kies-dag').addEventListener('change', () => { vulStarttijden(); toonBanen(); });
+$('kies-slot').addEventListener('change', toonBanen);
+
+// ---- Start ----
+$('groepscode').value = lees('padel-code');
+await laadClubs();
+vulStarttijden();
+toonBanen();
+try {
+  const r = await Auth.handleAuthCallback();
+  if (r && r.type === 'recovery') {
+    $('nieuw-wachtwoord').hidden = false;
+    $('nieuw-wachtwoord-uitleg').textContent = 'Kies een nieuw wachtwoord voor je account.';
+  } else if (r && r.type === 'invite') {
+    inviteToken = r.token;
+    $('nieuw-wachtwoord').hidden = false;
+    $('nieuw-wachtwoord-uitleg').textContent = 'Welkom! Kies een wachtwoord om je account te activeren.';
+  } else if (r && r.type === 'confirmation') {
+    melding('login-melding', 'Je e-mailadres is bevestigd. Je bent ingelogd.', 'ok');
+  }
+} catch (err) {
+  melding('login-melding', authFout(err), 'fout');
+}
+gebruiker = await Auth.getUser();
+if (gebruiker) await naIngelogd(gebruiker);
+else toonAuth();
+</script>
+</body>
+</html>
