@@ -1,12 +1,14 @@
 # Padelplanner Assen
 
-Een kleine Netlify-site waarmee een groep padelspelers hun niveau, gewenste tegenstanders, speelduur en beschikbaarheid doorgeeft. De planner zoekt daarna de beste momenten voor een viertal en laat zien welke club dan de goedkoopste vrije baan heeft.
+Een kleine Netlify-site waarmee een groep padelspelers hun niveau, gewenste tegenstanders, speelduur en beschikbaarheid doorgeeft. De planner zoekt daarna de beste momenten voor een viertal, laat zien wie er dan kan spelen en welke club de goedkoopste vrije baan heeft.
 
 ## Wat zit erin
 
-- **Peiling** per speler: niveau (8–8,5 / 8,5–9 / 9–9,5 / 9,5–10), met welk niveau je wilt spelen (meerdere ranges mogelijk), speelduur (1 uur en/of 1,5 uur, beide aanvinken geeft meer opties), frequentie en beschikbaarheid voor de komende 14 dagen.
-- **Planner**: zoekt momenten waarop minstens vier mensen kunnen die bij elkaar passen. Twee spelers passen bij elkaar als ze elkaars niveau accepteren en minstens één speelduur gemeen hebben. Alle vier in een viertal moeten bij elkaar passen.
-- **Banen en prijzen**: vier clubs (Peakz Padel Assen, Valley Padel Assen, Plaza Sportz Assen, Padel Rolde), alleen dubbelbanen, met status "vrij / bezet / nog niet boekbaar (opent over X dagen)" en prijs per baan en per persoon.
+- **Inloggen** met Netlify Identity (e-mail en wachtwoord). Alleen ingelogde spelers kunnen hun beschikbaarheid doorgeven en de antwoorden van anderen zien. Iedere speler heeft één antwoord per account.
+- **Peiling** per speler: niveau (8–8,5 / 8,5–9 / 9–9,5 / 9,5–10), met welk niveau je wilt spelen (meerdere ranges mogelijk), speelduur (1 uur en/of 1,5 uur), frequentie (2x per week, 1x per week, om de week of wanneer het lukt) en beschikbaarheid voor de komende 14 dagen.
+- **Speeltijden**: per dag kies je met een schuifbalk van hoe laat tot hoe laat je kunt spelen, per half uur, tussen 8:30 en 22:00. Kun je op een dag op meer momenten, dan voeg je met "Nog een moment kiezen op deze dag" een extra schuifbalk toe. De laatste starttijd is 20:30.
+- **Planner**: zoekt starttijden waarop minstens vier mensen kunnen die bij elkaar passen. Een speler telt mee als de speelduur binnen zijn of haar speeltijd past. Twee spelers passen bij elkaar als ze elkaars niveau accepteren en minstens één speelduur gemeen hebben. Per week toont de planner de twee beste momenten op verschillende dagen, met wie er kan spelen.
+- **Banen en prijzen**: vier clubs (Peakz Padel Assen, Valley Padel Assen, Plaza Sportz Assen, Padel Rolde), alleen dubbelbanen, met status "vrij" of "nog niet boekbaar (opent over X dagen)" en prijs per baan en per persoon. Bezette banen en momenten waarop alles bezet is worden niet getoond.
 - ATV De Hertenkamp is bewust weggelaten (buitenbanen, weer).
 
 ## Wat nog demo is
@@ -15,21 +17,19 @@ Een kleine Netlify-site waarmee een groep padelspelers hun niveau, gewenste tege
 - **Prijzen** van Peakz, Valley en Plaza zijn voorbeeldprijzen. Padel Rolde heeft nog geen prijs.
 - **Boekingshorizon**: alleen Peakz (28 dagen) is bevestigd. De andere clubs staan op een aanname van 14 dagen. Pas dit aan in `public/clubs.json` (`horizonDagen` en `horizonBevestigd`).
 
-## Online zetten
+## Accounts beheren
 
-Deze site gebruikt een Netlify-functie met Netlify Blobs om de antwoorden op te slaan. Slepen van een map naar Netlify Drop is daarom niet genoeg. Gebruik een van deze twee manieren:
+Standaard kan iedereen met de link een account maken (met bevestiging per e-mail). Wil je alleen spelers die je zelf uitnodigt, zet dan in Netlify onder Project configuration, Identity de registratie op "Invite only" en nodig spelers uit via het tabblad Identity.
 
-1. Zet de map in een GitHub-repository en koppel die aan een nieuwe site in Netlify. Netlify installeert zelf `@netlify/blobs` en bouwt de functie.
-2. Of gebruik de Netlify CLI: `npm install`, `npx netlify login` en dan `npx netlify deploy --prod`.
-
-Optioneel: stel in Netlify onder Site configuration, Environment variables de variabele `GROUP_CODE` in. Spelers moeten die code dan invullen om antwoorden te zien of op te slaan. Zonder code kan iedereen met de link de namen en antwoorden zien.
+Optioneel: stel de omgevingsvariabele `GROUP_CODE` in. Spelers moeten die code dan naast het inloggen ook invullen.
 
 ## Bestanden
 
 - `public/index.html`: de pagina
-- `public/planner.js`: matching, boekingshorizon, demo-beschikbaarheid, prijzen
+- `public/planner.js`: matching, speeltijden, boekingshorizon, demo-beschikbaarheid, prijzen
 - `public/clubs.json`: clubs, horizons en prijzen
-- `functions/responses.mjs`: opslaan en ophalen van antwoorden (`/api/responses`)
+- `src/auth.js`: inloggen; wordt bij de build gebundeld naar `public/auth.js`
+- `functions/responses.mjs`: opslaan en ophalen van antwoorden (`/api/responses`), alleen voor ingelogde spelers
 - `netlify.toml`, `package.json`: instellingen
 
 ## Nog te bouwen

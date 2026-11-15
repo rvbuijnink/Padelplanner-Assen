@@ -4,6 +4,13 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@netlify/blobs": ">=8.0.0"
+    "@netlify/blobs": ">=8.0.0",
+    "@netlify/identity": "^2.0.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "scripts": {
+    "build": "esbuild src/auth.js --bundle --format=esm --minify --outfile=public/auth.js"
   }
 }
