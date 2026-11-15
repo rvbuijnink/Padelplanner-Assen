@@ -1,0 +1,53 @@
+{
+  "_uitleg": "Pas horizonDagen aan zodra je in de boekingsomgeving van de club hebt gezien hoe ver vooruit de kalender loopt, en zet horizonBevestigd op true. prijsPerBaan60 is de prijs per baan voor 60 minuten; 90 minuten wordt als 1,5x berekend. prijsBron 'demo' = voorbeeldwaarde.",
+  "clubs": [
+    {
+      "id": "peakz",
+      "naam": "Peakz Padel Assen",
+      "type": "indoor",
+      "banen": 5,
+      "horizonDagen": 28,
+      "horizonBevestigd": true,
+      "opentOm": "00:00",
+      "prijsPerBaan60": 31,
+      "prijsBron": "demo",
+      "boeken": "https://www.peakzpadel.nl/"
+    },
+    {
+      "id": "valley",
+      "naam": "Valley Padel Assen",
+      "type": "indoor",
+      "banen": 7,
+      "horizonDagen": 14,
+      "horizonBevestigd": false,
+      "opentOm": null,
+      "prijsPerBaan60": 35,
+      "prijsBron": "demo",
+      "boeken": "https://assen.valleypadel.nl"
+    },
+    {
+      "id": "plaza",
+      "naam": "Plaza Sportz Assen",
+      "type": "indoor",
+      "banen": 4,
+      "horizonDagen": 14,
+      "horizonBevestigd": false,
+      "opentOm": null,
+      "prijsPerBaan60": 25,
+      "prijsBron": "demo",
+      "boeken": "https://plazasportzassen.nl"
+    },
+    {
+      "id": "rolde",
+      "naam": "Padel Rolde",
+      "type": "indoor",
+      "banen": 2,
+      "horizonDagen": 14,
+      "horizonBevestigd": false,
+      "opentOm": null,
+      "prijsPerBaan60": null,
+      "prijsBron": "onbekend",
+      "boeken": "https://padelrolde.nl"
+    }
+  ]
+}
