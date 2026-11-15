@@ -1,12 +1,18 @@
 // Slaat de peilingantwoorden op in Netlify Blobs en geeft ze terug.
-// GET  /api/responses  -> alle antwoorden
-// POST /api/responses  -> één speler opslaan (zelfde naam = overschrijven)
+// Alleen voor ingelogde spelers (Netlify Identity).
+// GET  /api/responses  -> alle antwoorden (eigen antwoord gemarkeerd met eigen: true)
+// POST /api/responses  -> eigen antwoord opslaan (één antwoord per account)
 import { getStore } from "@netlify/blobs";
+import { getUser } from "@netlify/identity";
 
 const NIVEAUS = ["n80", "n85", "n90", "n95"];
 const DUREN = ["60", "90"];
-const SLOTS = ["ochtend", "middag", "avond1", "avond2"];
-const FREQ = ["wekelijks", "tweewekelijks", "wanneer-het-lukt"];
+const FREQ = ["2x-per-week", "wekelijks", "tweewekelijks", "wanneer-het-lukt"];
+
+// Blokken van een half uur waarin je kunt spelen, van 08:30 tot 22:00.
+const BLOKKEN = [];
+for (let m = 8 * 60 + 30; m < 22 * 60; m += 30)
+  BLOKKEN.push(String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"));
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -14,10 +20,12 @@ const json = (data, status = 200) =>
     headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
 
-const slug = (s) =>
-  s.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const sleutel = (user) => "u-" + user.id;
 
 export default async (req) => {
+  const user = await getUser();
+  if (!user) return json({ fout: "Log eerst in." }, 401);
+
   // Optionele groepscode: stel GROUP_CODE in als omgevingsvariabele in Netlify.
   const code = Netlify.env.get("GROUP_CODE");
   if (code && req.headers.get("x-groepscode") !== code) {
@@ -25,20 +33,29 @@ export default async (req) => {
   }
 
   const store = getStore("padelplanner");
+  const mijnKey = sleutel(user);
 
   if (req.method === "GET") {
     const { blobs } = await store.list();
-    const responses = [];
+    const accounts = [];
+    const oud = [];
     for (const b of blobs) {
       const v = await store.get(b.key, { type: "json" });
-      if (v) responses.push(v);
+      if (!v) continue;
+      const { uid, ...openbaar } = v;
+      if (b.key.startsWith("u-")) accounts.push({ ...openbaar, eigen: b.key === mijnKey });
+      else oud.push(openbaar);
     }
+    // Antwoorden van voor het inloggen tellen mee, tenzij dezelfde naam al
+    // een antwoord via een account heeft.
+    const namen = new Set(accounts.map((r) => r.naam.toLowerCase()));
+    const responses = accounts.concat(oud.filter((r) => !namen.has(r.naam.toLowerCase())));
     return json({ responses });
   }
 
   if (req.method === "POST") {
     const text = await req.text();
-    if (text.length > 20000) return json({ fout: "Bericht te groot." }, 413);
+    if (text.length > 30000) return json({ fout: "Bericht te groot." }, 413);
     let b;
     try { b = JSON.parse(text); } catch { return json({ fout: "Ongeldige invoer." }, 400); }
 
@@ -57,13 +74,13 @@ export default async (req) => {
     for (const d of dagen) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return json({ fout: "Ongeldige datum." }, 400);
       const sl = b.beschikbaar[d];
-      if (!Array.isArray(sl) || !sl.every((x) => SLOTS.includes(x))) return json({ fout: "Ongeldig tijdvak." }, 400);
-      if (sl.length) beschikbaar[d] = [...new Set(sl)];
+      if (!Array.isArray(sl) || !sl.every((x) => BLOKKEN.includes(x))) return json({ fout: "Ongeldige speeltijd." }, 400);
+      if (sl.length) beschikbaar[d] = BLOKKEN.filter((x) => sl.includes(x));
     }
 
-    const key = slug(naam);
-    if (!key) return json({ fout: "Ongeldige naam." }, 400);
     const record = {
+      versie: 2,
+      uid: user.id,
       naam,
       niveau: b.niveau,
       wensNiveaus: [...new Set(b.wensNiveaus)],
@@ -72,7 +89,7 @@ export default async (req) => {
       beschikbaar,
       bijgewerkt: new Date().toISOString(),
     };
-    await store.setJSON(key, record);
+    await store.setJSON(mijnKey, record);
     return json({ ok: true });
   }
 
