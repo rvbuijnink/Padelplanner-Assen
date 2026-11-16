@@ -180,7 +180,7 @@
   <h1>Padelplanner <span>Assen</span></h1>
   <p class="sub">Vind een viertal én een baan die past, in Assen en omgeving.</p>
 </header></div>
-<div class="demo"><p>Vrije banen van Valley Padel Assen en Padel Rolde worden live opgehaald. Bij Peakz en Plaza zie je vrije banen alleen na inloggen: gebruik daar de boekknop of Padelchecker.</p></div>
+<div class="demo"><p>Vrije banen van Peakz Padel Assen, Valley Padel Assen, Plaza Sportz Assen en Padel Rolde worden live opgehaald.</p></div>
 
 <main>
   <section id="login-sectie" hidden>
@@ -653,6 +653,7 @@
     const c = live && live.clubs && live.clubs[club.id];
     if (!c || !c.live) return null;
     if (!c.boekbaar) return { soort: 'nog-niet', boekbaarTot: c.boekbaarTot, link: c.boekingsLink };
+    const diep = !!c.diepeLink;
     const venster = P.leesTijd(slot);
     const tijden = [];
     for (const st of c.starts) {
@@ -666,12 +667,13 @@
         break; // per begintijd de eerste speelduur die past (voorkeur van de groep)
       }
     }
-    return tijden.length ? { soort: 'vrij', tijden, link: c.boekingsLink } : { soort: 'vol', link: c.boekingsLink };
+    return tijden.length ? { soort: 'vrij', tijden, link: c.boekingsLink, diep } : { soort: 'vol', link: c.boekingsLink, diep };
   }
-  const liveLink = (lv, dag, t) => lv.link + '?date=' + dag + '&time=' + t.tijd + '&duration=' + t.duur + '&court=' + encodeURIComponent(t.baanId);
+  // Alleen RacketIQ kan datum, tijd en baan via de link invullen; bij de andere clubs open je de boekingspagina.
+  const liveLink = (lv, dag, t) => !lv.diep ? lv.link : lv.link + '?date=' + dag + '&time=' + t.tijd + '&duration=' + t.duur + '&court=' + encodeURIComponent(t.baanId);
   const duurLabel = (d) => (String(d) === '60' ? '1 uur' : '1,5 uur');
   function liveRegel(club, lv, dag) {
-    if (lv.soort === 'vol') return [h('span', { class: 'st-te-laat' }, 'live: geen dubbelbaan vrij binnen deze tijd'), ' ', h('a', { class: 'knop rustig', href: lv.link + '?date=' + dag, target: '_blank', rel: 'noopener' }, 'Bekijk ' + club.naam + ' ↗')];
+    if (lv.soort === 'vol') return [h('span', { class: 'st-te-laat' }, 'live: geen dubbelbaan vrij binnen deze tijd'), ' ', h('a', { class: 'knop rustig', href: lv.diep ? lv.link + '?date=' + dag : lv.link, target: '_blank', rel: 'noopener' }, 'Bekijk ' + club.naam + ' ↗')];
     if (lv.soort === 'nog-niet') return [h('span', { class: 'let' }, 'nog niet boekbaar' + (lv.boekbaarTot ? ' (nu boekbaar t/m ' + dagLabel(lv.boekbaarTot) + ')' : '')), ' ', h('a', { class: 'knop rustig', href: lv.link, target: '_blank', rel: 'noopener' }, 'Naar ' + club.naam + ' ↗')];
     return [h('span', { class: 'st-ingevuld' }, 'live vrij:'), h('div', { class: 'boekrij' }, lv.tijden.map((t) =>
       h('a', { class: 'knop', href: liveLink(lv, dag, t), target: '_blank', rel: 'noopener', title: t.aantal + (t.aantal === 1 ? ' baan' : ' banen') + ' vrij' },
@@ -720,7 +722,9 @@
           : h('div', { class: 'let' }, 'Geen club met een boekbare baan waar dit viertal wil spelen.'),
         h('div', { class: 'boekrij' }, h('a', { class: 'knop rustig', href: padelcheckerUrl, target: '_blank', rel: 'noopener' }, 'Vergelijk vrije banen op Padelchecker ↗'))));
     });
-    box.append(h('p', { class: 'hint' }, 'Live: ' + clubs.filter((c) => c.live).map((c) => c.naam).join(' en ') + ' (dubbelbanen, ververst elke 10 minuten). Bij de andere clubs kun je de vrije banen alleen na inloggen zien; gebruik daarvoor de boekknop of Padelchecker.'));
+    const liveNamen = clubs.filter((c) => c.live).map((c) => c.naam);
+    const andere = clubs.filter((c) => !c.live).map((c) => c.naam);
+    box.append(h('p', { class: 'hint' }, 'Live: ' + (liveNamen.length > 1 ? liveNamen.slice(0, -1).join(', ') + ' en ' + liveNamen.slice(-1) : liveNamen.join('')) + ' (dubbelbanen, ververst elke 10 minuten).' + (andere.length ? ' Bij ' + andere.join(' en ') + ' gebruik je de boekknop of Padelchecker.' : '')));
   }
 
   // ---- Banenoverzicht ----
