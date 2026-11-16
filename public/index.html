@@ -74,7 +74,7 @@
   <h1>Padelplanner Assen</h1>
   <p class="sub">Vind een viertal én een baan die past, in Assen en omgeving.</p>
 </header>
-<div class="demo"><p>De planner weet niet welke banen precies vrij zijn: de clubs bieden daar geen koppeling voor. Gebruik de boekknop om bij de club te kijken en te boeken, of vergelijk vrije banen op Padelchecker.</p></div>
+<div class="demo"><p>Vrije banen van Valley Padel Assen en Padel Rolde worden live opgehaald. Bij Peakz en Plaza zie je vrije banen alleen na inloggen: gebruik daar de boekknop of Padelchecker.</p></div>
 
 <main>
   <section>
@@ -421,50 +421,112 @@
       st.soort === 'boekbaar' ? 'Boek bij ' + club.naam + ' ↗' : 'Naar ' + club.naam + ' ↗');
   }
 
+  // ---- Live vrije banen (via /api/banen) ----
+  const liveCache = new Map();
+  function haalLive(dag, slot) {
+    const key = dag + '|' + slot;
+    if (!liveCache.has(key)) {
+      liveCache.set(key, fetch('/api/banen?datum=' + dag + '&slot=' + slot)
+        .then((r) => (r.ok ? r.json() : null)).catch(() => null)
+        .then((d) => { if (!d) liveCache.delete(key); return d; }));
+    }
+    return liveCache.get(key);
+  }
+  // Live situatie van één club in een tijdvak voor de gevraagde speelduren.
+  function liveVoor(live, club, duren) {
+    const c = live && live.clubs && live.clubs[club.id];
+    if (!c || !c.live) return null;
+    if (!c.boekbaar) return { soort: 'nog-niet', boekbaarTot: c.boekbaarTot, link: c.boekingsLink };
+    const tijden = [];
+    for (const st of c.starts) {
+      for (const duur of duren) {
+        const banen = st.banen.filter((b) => b.prijzen[duur] != null);
+        if (!banen.length) continue;
+        const goedkoopst = banen.slice().sort((x, y) => x.prijzen[duur] - y.prijzen[duur])[0];
+        tijden.push({ tijd: st.tijd, duur, aantal: banen.length, prijs: goedkoopst.prijzen[duur], baanId: goedkoopst.id });
+        break; // per begintijd de eerste speelduur die past (voorkeur van de groep)
+      }
+    }
+    return tijden.length ? { soort: 'vrij', tijden, link: c.boekingsLink } : { soort: 'vol', link: c.boekingsLink };
+  }
+  const liveLink = (lv, dag, t) => lv.link + '?date=' + dag + '&time=' + t.tijd + '&duration=' + t.duur + '&court=' + encodeURIComponent(t.baanId);
+  const duurLabel = (d) => (String(d) === '60' ? '1 uur' : '1,5 uur');
+  function liveRegel(club, lv, dag) {
+    if (lv.soort === 'vol') return [h('span', { class: 'st-te-laat' }, 'live: geen dubbelbaan vrij in dit tijdvak'), ' ', h('a', { class: 'knop rustig', href: lv.link + '?date=' + dag, target: '_blank', rel: 'noopener' }, 'Bekijk ' + club.naam + ' ↗')];
+    if (lv.soort === 'nog-niet') return [h('span', { class: 'let' }, 'nog niet boekbaar' + (lv.boekbaarTot ? ' (nu boekbaar t/m ' + dagLabel(lv.boekbaarTot) + ')' : '')), ' ', h('a', { class: 'knop rustig', href: lv.link, target: '_blank', rel: 'noopener' }, 'Naar ' + club.naam + ' ↗')];
+    return [h('span', { class: 'st-ingevuld' }, 'live vrij:'), h('div', { class: 'boekrij' }, lv.tijden.map((t) =>
+      h('a', { class: 'knop', href: liveLink(lv, dag, t), target: '_blank', rel: 'noopener', title: t.aantal + (t.aantal === 1 ? ' baan' : ' banen') + ' vrij' },
+        t.tijd + ' · ' + duurLabel(t.duur) + ' · ' + euro(t.prijs / 4) + ' p.p.' + (t.aantal > 1 ? ' (' + t.aantal + ' banen)' : ''))))];
+  }
+
   // ---- Planner tonen ----
-  function toonPlanner() {
+  let plannerRun = 0;
+  async function toonPlanner() {
+    const run = ++plannerRun;
     const box = $('planner');
     box.replaceChildren();
     if (!spelers.length) { if (!$('planner-info').textContent) $('planner-info').textContent = 'Nog geen spelers.'; return; }
     $('planner-info').textContent = spelers.length + ' speler(s) doen mee. De planner kijkt naar ' + kortLabel(planDagen[0]) + ' t/m ' + kortLabel(planDagen[planDagen.length - 1]) + '.';
-    const top = P.plan(spelers, clubs, today, 3, planDagen);
-    if (!top.length) {
+    const kandidaten = P.plan(spelers, clubs, today, 8, planDagen);
+    if (!kandidaten.length) {
       box.append(h('p', {}, 'Er is nog geen moment waarop vier mensen kunnen die qua niveau, speelduur en baanvoorkeur bij elkaar passen. Meer tijdvakken, niveau-ranges, beide speelduren of minder clubs op "Niet" helpt.'));
       return;
     }
-    top.forEach((m, i) => {
-      const duren = m.duren.map((d) => (d === '60' ? '1 uur' : '1,5 uur')).join(' of ');
+    box.append(h('p', { class: 'hint' }, 'Vrije banen ophalen bij de clubs…'));
+    const lives = await Promise.all(kandidaten.map((m) => (clubs.some((c) => c.live) ? haalLive(m.datum, m.slot.id) : null)));
+    if (run !== plannerRun) return;
+    // Per moment: live gegevens toevoegen en bepalen of er zeker een baan vrij is.
+    const momenten = kandidaten.map((m, i) => {
+      const opties = m.opties.map((o) => Object.assign({}, o, { lv: o.club.live ? liveVoor(lives[i], o.club, m.duren) : null }));
+      const rang = (o) => (o.lv ? { vrij: 0, vol: 3, 'nog-niet': 2 }[o.lv.soort] : o.status.soort === 'boekbaar' ? 1 : 2);
+      opties.sort((a, b) => rang(a) - rang(b) || ((a.lv && a.lv.tijden ? a.lv.tijden[0].prijs : a.prijs ? a.prijs.perBaan : 1e9) - (b.lv && b.lv.tijden ? b.lv.tijden[0].prijs : b.prijs ? b.prijs.perBaan : 1e9)));
+      const zeker = opties.some((o) => o.lv && o.lv.soort === 'vrij');
+      const misschien = opties.some((o) => !o.lv && o.status.soort === 'boekbaar');
+      return Object.assign({}, m, { opties, klasse: zeker ? 0 : misschien ? 1 : 2 });
+    });
+    momenten.sort((a, b) => a.klasse - b.klasse || b.spelers.length - a.spelers.length || a.datum.localeCompare(b.datum));
+    box.replaceChildren();
+    momenten.slice(0, 3).forEach((m, i) => {
+      const duren = m.duren.map(duurLabel).join(' of ');
+      const label = m.klasse === 0 ? h('span', { class: 'badge' }, 'baan vrij') : m.klasse === 1 ? h('span', { class: 'badge', style: 'border-color:var(--let);color:var(--let)' }, 'controleer bij club') : h('span', { class: 'badge', style: 'border-color:#d1242f;color:#d1242f' }, 'geen baan gevonden');
       box.append(h('div', { class: 'moment' },
-        h('h3', {}, (i + 1) + '. ' + dagLabel(m.datum) + ', ' + slotLabel(m.slot.id)),
+        h('h3', {}, (i + 1) + '. ' + dagLabel(m.datum) + ', ' + slotLabel(m.slot.id), label),
         h('div', {}, m.spelers.length + ' spelers kunnen: ' + m.spelers.join(', ')),
         h('div', { class: 'hint' }, 'Voorbeeldviertal: ' + m.voorbeeldGroep.join(', ') + ' (speelduur: ' + duren + ')'),
         m.opties.length
-          ? h('ul', {}, m.opties.slice(0, 3).map((o) => h('li', {}, h('strong', {}, o.club.naam),
-              ': ', statusTekst(o.club, o.status), ' – ', prijsTekst(o.club, m.datum, m.slot.id),
-              o.club.opmerking ? h('div', { class: 'hint' }, o.club.opmerking) : null,
-              h('div', { class: 'boekrij' }, boekKnop(o.club, o.status)))))
+          ? h('ul', {}, m.opties.slice(0, 4).map((o) => h('li', {}, h('strong', {}, o.club.naam), ': ',
+              o.lv ? liveRegel(o.club, o.lv, m.datum)
+                   : [statusTekst(o.club, o.status), ' – ', prijsTekst(o.club, m.datum, m.slot.id), h('div', { class: 'boekrij' }, boekKnop(o.club, o.status))],
+              o.club.opmerking ? h('div', { class: 'hint' }, o.club.opmerking) : null)))
           : h('div', { class: 'let' }, 'Geen club met een boekbare baan waar dit viertal wil spelen.'),
         h('div', { class: 'boekrij' }, h('a', { class: 'knop rustig', href: padelcheckerUrl, target: '_blank', rel: 'noopener' }, 'Vergelijk vrije banen op Padelchecker ↗'))));
     });
+    box.append(h('p', { class: 'hint' }, 'Live: ' + clubs.filter((c) => c.live).map((c) => c.naam).join(' en ') + ' (dubbelbanen, ververst elke 10 minuten). Bij de andere clubs kun je de vrije banen alleen na inloggen zien; gebruik daarvoor de boekknop of Padelchecker.'));
   }
 
   // ---- Banenoverzicht ----
-  function toonBanen() {
+  let banenRun = 0;
+  async function toonBanen() {
+    const run = ++banenRun;
     const dag = $('kies-dag').value, slot = $('kies-slot').value;
     const r = ik();
-    const rijen = clubs.map((c) => ({ c, st: P.status(c, dag, slot, today), p: P.prijs(c, 60, dag, slot), v: r ? P.voorkeurVan(r, c.id) : null }));
-    const kandidaten = rijen.filter((x) => x.st.soort === 'boekbaar' && x.p && x.v !== 'niet');
-    const min = kandidaten.length ? Math.min(...kandidaten.map((x) => x.p.perPersoon)) : null;
+    const live = clubs.some((c) => c.live) ? await haalLive(dag, slot) : null;
+    if (run !== banenRun) return;
+    const duren = r ? r.duren : ['90', '60'];
+    const rijen = clubs.map((c) => ({ c, st: P.status(c, dag, slot, today), p: P.prijs(c, 60, dag, slot), v: r ? P.voorkeurVan(r, c.id) : null, lv: c.live ? liveVoor(live, c, duren) : null }));
+    const pp = (x) => (x.lv ? (x.lv.tijden ? x.lv.tijden[0].prijs / 4 : null) : x.st.soort === 'boekbaar' && x.p ? x.p.perPersoon : null);
+    const kandidaten = rijen.filter((x) => pp(x) != null && x.v !== 'niet');
+    const min = kandidaten.length ? Math.min(...kandidaten.map(pp)) : null;
     const vLabel = (v) => (P.VOORKEUREN.find((x) => x.id === v) || {}).label;
     $('banen').replaceChildren(
-      h('thead', {}, h('tr', {}, h('th', {}, 'Club'), h('th', {}, 'Jouw voorkeur'), h('th', {}, 'Status'), h('th', {}, 'Prijs'))),
+      h('thead', {}, h('tr', {}, h('th', {}, 'Club'), h('th', {}, 'Jouw voorkeur'), h('th', {}, 'Beschikbaarheid'), h('th', {}, 'Prijs'))),
       h('tbody', {}, rijen.map((x) => {
-        const goedkoopst = min != null && kandidaten.includes(x) && x.p.perPersoon === min;
+        const goedkoopst = min != null && kandidaten.includes(x) && pp(x) === min;
         return h('tr', { class: goedkoopst ? 'goedkoopst' : '' },
           h('td', {}, h('a', { href: x.c.boeken, target: '_blank', rel: 'noopener' }, x.c.naam), goedkoopst ? h('span', { class: 'badge' }, 'goedkoopst') : null),
           h('td', { class: x.v === 'niet' ? 'st-te-laat' : '' }, x.v ? vLabel(x.v) : '–'),
-          h('td', {}, statusTekst(x.c, x.st), h('div', { class: 'boekrij' }, boekKnop(x.c, x.st))),
-          h('td', {}, prijsTekst(x.c, dag, slot)));
+          h('td', {}, x.lv ? liveRegel(x.c, x.lv, dag) : [statusTekst(x.c, x.st), h('div', { class: 'boekrij' }, boekKnop(x.c, x.st))]),
+          h('td', {}, x.lv ? (x.lv.tijden ? 'live, zie tijden' : '–') : prijsTekst(x.c, dag, slot)));
       })));
   }
 
@@ -563,7 +625,7 @@
   }
   $('naam').addEventListener('change', naamGewijzigd);
   $('groepscode').addEventListener('change', async () => { bewaar('padel-code', $('groepscode').value.trim()); await laadClubs(); await laadSpelers(); naamGewijzigd(); });
-  $('ververs').addEventListener('click', async () => { await laadSpelers(); toonOverzicht(); toonPlanner(); });
+  $('ververs').addEventListener('click', async () => { liveCache.clear(); await laadSpelers(); toonOverzicht(); toonPlanner(); toonBanen(); });
   $('kies-dag').addEventListener('change', toonBanen);
   $('kies-slot').addEventListener('change', toonBanen);
 

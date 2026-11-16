@@ -12,7 +12,8 @@
       "prijsPerBaan60": 31,
       "prijsBron": "demo",
       "boeken": "https://www.peakzpadel.nl/reserveren/court-booking/reservation",
-      "systeem": "Peakz-app / website (Foys)"
+      "systeem": "Peakz-app / website (Foys)",
+      "live": false
     },
     {
       "id": "valley",
@@ -25,7 +26,8 @@
       "prijsPerBaan60": 35,
       "prijsBron": "demo",
       "boeken": "https://assen.valleypadel.nl/nl/booking",
-      "systeem": "RacketIQ"
+      "systeem": "RacketIQ",
+      "live": true
     },
     {
       "id": "plaza",
@@ -38,7 +40,8 @@
       "prijsPerBaan60": 25,
       "prijsBron": "demo",
       "boeken": "https://www.meetandplay.nl/club/88140",
-      "systeem": "KNLTB Meet & Play"
+      "systeem": "KNLTB Meet & Play",
+      "live": false
     },
     {
       "id": "rolde",
@@ -51,8 +54,10 @@
       "prijsPerBaan60": null,
       "prijsBron": "onbekend",
       "boeken": "https://boeken.padelrolde.nl/nl/booking",
-      "systeem": "RacketIQ"
+      "systeem": "RacketIQ",
+      "live": true
     }
   ],
-  "padelchecker": "https://www.padelchecker.nl/"
+  "padelchecker": "https://www.padelchecker.nl/",
+  "_live": "live = true: vrije banen worden live opgehaald via /api/banen (RacketIQ). Peakz (Foys) en Plaza (Meet & Play) tonen beschikbaarheid alleen na inloggen."
 }

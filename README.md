@@ -13,12 +13,11 @@ Een kleine Netlify-site waarmee een groep padelspelers hun niveau, gewenste tege
 
 ## Koppeling met de clubs
 
-Geen van de clubs biedt een openbare koppeling voor vrije banen (Peakz via de eigen app/Foys, Valley en Padel Rolde via RacketIQ, Plaza via KNLTB Meet & Play). Ook Padelchecker heeft geen openbare API. Daarom:
-
-- Bij elk voorgesteld moment en in het banenoverzicht staat per club een **boekknop** naar de boekingspagina van die club, plus een knop **Vergelijk vrije banen op Padelchecker**.
-- De planner laat per club zien of een dag al **boekbaar** is of wanneer de boeking opent, op basis van de boekingshorizon.
-- Op het tabblad **Beheer clubs** vul je de echte prijzen in (1 uur, 1,5 uur en daltarief voor ma–vr tot 17:00), hoeveel dagen vooruit je kunt boeken, hoe laat een nieuwe dag opengaat en een opmerking. Zolang een club niet is ingevuld, gelden de voorbeeldwaarden uit `public/clubs.json`.
-- Optioneel: stel `BEHEER_CODE` in als omgevingsvariabele. Alleen wie die code kent, kan dan clubgegevens wijzigen.
+- **Live vrije banen** voor Valley Padel Assen en Padel Rolde. Beide draaien op RacketIQ, waarvan de beschikbaarheid openbaar leesbaar is. De functie `netlify/functions/banen.mts` (`/api/banen?datum=…&slot=…`) haalt per begintijd (elk half uur binnen het tijdvak) de vrije **dubbelbanen** met prijs op. Antwoorden worden 10 minuten gecachet, in de functie en op de CDN van Netlify, zodat de clubs niet worden belast.
+- De planner bekijkt de 8 beste momenten (waarop de meeste spelers kunnen) en zet momenten met een live vrije baan bovenaan. Daarna komen momenten met een club die je zelf moet controleren, en als laatste momenten waarop live alles vol is.
+- Elke vrije tijd is een **boekknop** die direct naar de boekingspagina van de club gaat, met datum, tijd, speelduur en baan al ingevuld.
+- **Peakz** (Foys) en **Plaza** (KNLTB Meet & Play) tonen hun vrije banen alleen na inloggen. Daar blijven het een boekknop naar de club en de link naar Padelchecker.
+- Op het tabblad **Beheer clubs** vul je prijzen en boekingshorizon in voor de clubs zonder live koppeling. Met `BEHEER_CODE` scherm je dat af.
 
 ## Online zetten
 
@@ -34,6 +33,7 @@ Optioneel: stel in Netlify onder Site configuration, Environment variables de va
 - `public/index.html`: de pagina
 - `public/planner.js`: matching, boekingshorizon, prijzen (incl. daltarief)
 - `public/clubs.json`: clubs, horizons en prijzen
+- `netlify/functions/banen.mts`: live vrije banen (`/api/banen`)
 - `netlify/functions/api.mts`: `/api/spelers` (ophalen), `/api/profiel` (vaste instellingen) `/api/beschikbaarheid` (één week) en `/api/clubs` (clubgegevens)
 - `db/schema.ts`: tabellen `spelers`, `beschikbaarheid` en `club_gegevens`; na een wijziging `npx drizzle-kit generate --name <naam>`
 - `netlify.toml`, `package.json`: instellingen
