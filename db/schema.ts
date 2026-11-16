@@ -4,6 +4,9 @@ import { pgTable, serial, text, timestamp, integer, jsonb, primaryKey, date, boo
 export const spelers = pgTable("spelers", {
   id: serial().primaryKey(),
   slug: text().notNull().unique(),
+  // Netlify Identity-account van de speler. Leeg bij spelers van vóór het inloggen; die worden
+  // gekoppeld zodra iemand met dezelfde naam inlogt en zijn instellingen opslaat.
+  userId: text("user_id").unique(),
   naam: text().notNull(),
   niveau: text().notNull(),
   wensNiveaus: jsonb("wens_niveaus").$type<string[]>().notNull(),
@@ -21,7 +24,7 @@ export const beschikbaarheid = pgTable(
   {
     spelerId: integer("speler_id").notNull().references(() => spelers.id, { onDelete: "cascade" }),
     week: date().notNull(),
-    // datum (YYYY-MM-DD) -> lijst van tijdvak-id's
+    // datum (YYYY-MM-DD) -> lijst van tijden "UU:MM-UU:MM" (oudere rijen kunnen nog dagdeel-id's bevatten)
     tijdvakken: jsonb().$type<Record<string, string[]>>().notNull(),
     bijgewerkt: timestamp("bijgewerkt", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -19,6 +19,10 @@
     { id: 'avond1', label: 'Vroege avond (17–19)' },
     { id: 'avond2', label: 'Late avond (19–22)' }
   ];
+  // Oude dagdelen (van vóór de schuifbalken) worden omgezet naar tijden.
+  const OUDE_SLOTS = { ochtend: [540, 720], middag: [720, 1020], avond1: [1020, 1140], avond2: [1140, 1320] };
+  // Schuifbalken lopen van 07:00 tot 23:00 in stappen van een half uur.
+  const DAG_VAN = 7 * 60, DAG_TOT = 23 * 60, STAP = 30;
   const VENSTER_DAGEN = 14;
   // Beschikbaarheid vul je per week in, uiterlijk 2 weken van tevoren.
   const WEKEN_ZICHTBAAR = 4; // deze week + 3 weken vooruit
@@ -45,6 +49,36 @@
     const ub = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
     return Math.round((ub - ua) / 86400000);
   }
+  const naarMin = (t) => { const [u, m] = String(t).split(':').map(Number); return u * 60 + m; };
+  const naarTijd = (m) => pad(Math.floor(m / 60)) + ':' + pad(m % 60);
+  // "19:00-21:30" (of een oud dagdeel) -> [van, tot] in minuten
+  function leesTijd(s) {
+    if (OUDE_SLOTS[s]) return OUDE_SLOTS[s].slice();
+    const m = /^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/.exec(String(s));
+    if (!m) return null;
+    const a = +m[1] * 60 + +m[2], b = +m[3] * 60 + +m[4];
+    return a < b && b <= 1440 ? [a, b] : null;
+  }
+  const tijdId = (a, b) => naarTijd(a) + '-' + naarTijd(b);
+  const tijdLabel = (id) => { const r = leesTijd(id); return r ? naarTijd(r[0]) + '–' + naarTijd(r[1]) : String(id); };
+  // Lijst met tijden van één dag: gesorteerd en overlappende tijden samengevoegd, als [[van, tot]].
+  function tijdenVan(lijst) {
+    const r = (lijst || []).map(leesTijd).filter(Boolean).sort((x, y) => x[0] - y[0]);
+    const out = [];
+    for (const [a, b] of r) {
+      const l = out[out.length - 1];
+      if (l && a <= l[1]) l[1] = Math.max(l[1], b);
+      else out.push([a, b]);
+    }
+    return out;
+  }
+  const normaliseer = (lijst) => tijdenVan(lijst).map(([a, b]) => tijdId(a, b));
+  // Hoeveel minuten iemand vanaf tijdstip t aaneengesloten kan.
+  function vrijVanaf(tijden, t) {
+    for (const [a, b] of tijden) if (a <= t && t < b) return b - t;
+    return 0;
+  }
+
   function volgendeDagen(today, n) {
     const out = [];
     for (let i = 0; i < (n || VENSTER_DAGEN); i++) {
@@ -148,11 +182,12 @@
     return { soort: 'boekbaar' };
   }
 
-  // Daluren: maandag t/m vrijdag, ochtend en middag (tot 17:00).
+  // Daluren: maandag t/m vrijdag, met een starttijd vóór 17:00.
   function isDal(datumKey, slotId) {
     if (!datumKey || !slotId) return false;
     const wd = parseKey(datumKey).getDay();
-    return wd >= 1 && wd <= 5 && (slotId === 'ochtend' || slotId === 'middag');
+    const r = leesTijd(slotId);
+    return wd >= 1 && wd <= 5 && !!r && r[0] < 17 * 60;
   }
 
   // Prijs per baan voor 60 of 90 minuten. Zonder 90-minutenprijs: 1,5 x de 60-minutenprijs.
@@ -191,25 +226,44 @@
   }
 
   // spelers: [{ naam, niveau, wensNiveaus, duren, clubVoorkeur, weken }]
+  // Per dag wordt elk half uur gekeken wie er vanaf dat moment 1 of 1,5 uur aaneengesloten kan.
   function plan(spelers, clubs, today, aantal, dagen) {
-    const lijst = spelers.map((s) => Object.assign({}, s, { beschikbaar: beschikbaarVan(s) }));
+    const lijst = spelers.map((s) => {
+      const per = {};
+      for (const [d, t] of Object.entries(beschikbaarVan(s))) per[d] = tijdenVan(t);
+      return Object.assign({}, s, { tijden: per });
+    });
+    const minDuur = Math.min(...DUREN.map((d) => Number(d.id)));
     const kandidaten = [];
     for (const d of dagen || volgendeDagen(today)) {
-      for (const s of SLOTS) {
-        const beschikbaar = lijst.filter((r) => (r.beschikbaar[d] || []).includes(s.id));
-        if (beschikbaar.length < 4) continue;
+      let vorige = null;
+      for (let t = DAG_VAN; t + minDuur <= 1440; t += STAP) {
+        const beschikbaar = [];
+        for (const r of lijst) {
+          const rest = vrijVanaf(r.tijden[d] || [], t);
+          const duren = r.duren.filter((x) => Number(x) <= rest);
+          if (duren.length) beschikbaar.push(Object.assign({}, r, { duren, rest }));
+        }
+        if (beschikbaar.length < 4) { vorige = null; continue; }
         const groepen = groepenVanVier(beschikbaar, clubs);
-        if (!groepen.length) continue;
+        if (!groepen.length) { vorige = null; continue; }
         const namen = new Set();
         groepen.forEach((g) => g.spelers.forEach((p) => namen.add(p.naam)));
+        const sleutel = [...namen].sort().join('|');
+        // Zelfde spelers als een half uur eerder: dat moment is al gevonden.
+        if (vorige && vorige.sleutel === sleutel && t < vorige.tot) continue;
         // Kies het groepje met de meeste gemeenschappelijke speelduren en de meeste clubs waar iedereen wil spelen
         const aantalClubs = (g) => clubs.filter((c) => clubOk(g.spelers, c)).length;
         const beste = groepen.slice().sort((a, b) => b.duren.length - a.duren.length || aantalClubs(b) - aantalClubs(a))[0];
+        const tot = t + Math.min(...beste.spelers.map((p) => p.rest));
+        vorige = { sleutel, tot };
+        const id = tijdId(t, tot);
+        const slot = { id, van: naarTijd(t), tot: naarTijd(tot), label: tijdLabel(id) };
         const opties = clubs
           .filter((c) => clubOk(beste.spelers, c))
-          .map((c) => ({ club: c, status: status(c, d, s.id, today) }))
+          .map((c) => ({ club: c, status: status(c, d, id, today) }))
           .filter((o) => o.status.soort === 'boekbaar' || o.status.soort === 'nog-niet')
-          .map((o) => Object.assign(o, { prijs: prijs(o.club, beste.duren[0], d, s.id) }))
+          .map((o) => Object.assign(o, { prijs: prijs(o.club, beste.duren[0], d, id) }))
           .sort((a, b) => {
             const va = a.status.soort === 'boekbaar' ? 0 : 1;
             const vb = b.status.soort === 'boekbaar' ? 0 : 1;
@@ -218,7 +272,7 @@
           });
         kandidaten.push({
           datum: d,
-          slot: s,
+          slot,
           spelers: [...namen].sort(),
           aantalGroepen: groepen.length,
           voorbeeldGroep: beste.spelers.map((p) => p.naam),
@@ -232,13 +286,23 @@
       (a, b) =>
         b.spelers.length - a.spelers.length ||
         Number(b.heeftVrij) - Number(a.heeftVrij) ||
-        a.datum.localeCompare(b.datum)
+        a.datum.localeCompare(b.datum) ||
+        a.slot.van.localeCompare(b.slot.van)
     );
-    return kandidaten.slice(0, aantal || 3);
+    // Overlappende momenten op dezelfde dag met (een deel van) dezelfde spelers en speelduren maar één keer tonen.
+    const gekozen = [];
+    for (const k of kandidaten) {
+      const dubbel = gekozen.some((g) => g.datum === k.datum && k.slot.van < g.slot.tot && g.slot.van < k.slot.tot &&
+        k.spelers.every((n) => g.spelers.includes(n)) && k.duren.every((x) => g.duren.includes(x)));
+      if (!dubbel) gekozen.push(k);
+      if (gekozen.length >= (aantal || 3)) break;
+    }
+    return gekozen;
   }
 
   return {
-    NIVEAUS, DUREN, SLOTS, VENSTER_DAGEN, WEKEN_ZICHTBAAR, DEADLINE_DAGEN, VOORKEUREN, FREQUENTIES,
+    NIVEAUS, DUREN, SLOTS, OUDE_SLOTS, DAG_VAN, DAG_TOT, STAP, VENSTER_DAGEN,
+    naarMin, naarTijd, leesTijd, tijdId, tijdLabel, tijdenVan, normaliseer, vrijVanaf, WEKEN_ZICHTBAAR, DEADLINE_DAGEN, VOORKEUREN, FREQUENTIES,
     dagKey, parseKey, dagenTussen, volgendeDagen,
     maandagVan, weken, dagenVanWeek, deadline, weekStatus, beschikbaarVan, voorkeurVan, clubOk,
     compatibel, groepenVanVier, status, prijs, isDal, voegClubsSamen, plan

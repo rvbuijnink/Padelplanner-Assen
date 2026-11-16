@@ -5,9 +5,14 @@
   "type": "module",
   "dependencies": {
     "@netlify/database": "^2.0.3",
+    "@netlify/identity": "^2.0.1",
     "drizzle-orm": "^1.0.0-beta.22"
   },
   "devDependencies": {
-    "drizzle-kit": "^1.0.0-beta.22"
+    "drizzle-kit": "^1.0.0-beta.22",
+    "esbuild": "^0.28.2"
+  },
+  "scripts": {
+    "build": "esbuild src/auth.js --bundle --format=iife --minify --outfile=public/auth.js"
   }
 }

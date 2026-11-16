@@ -1,5 +1,5 @@
 // Live vrije padelbanen bij clubs met een openbaar leesbaar boekingssysteem.
-// GET /api/banen?datum=YYYY-MM-DD&slot=avond2
+// GET /api/banen?datum=YYYY-MM-DD&slot=19:00-22:00 (of een oud dagdeel zoals avond2)
 //
 // Ondersteund: RacketIQ (Valley Padel Assen, Padel Rolde). Dit systeem geeft per begintijd
 // de vrije banen terug, daarom vragen we alleen de begintijden binnen het gevraagde tijdvak op.
@@ -23,10 +23,18 @@ const SLOTS: Record<string, [number, number]> = {
   avond1: [17, 19],
   avond2: [19, 22],
 };
+// Of een tijd "UU:MM-UU:MM" zoals die uit de schuifbalken komt.
+const leesSlot = (slot: string): [number, number] | null => {
+  if (SLOTS[slot]) return [SLOTS[slot][0] * 60, SLOTS[slot][1] * 60];
+  const m = /^([01]\d|2[0-4]):(00|30)-([01]\d|2[0-4]):(00|30)$/.exec(slot);
+  if (!m) return null;
+  const a = +m[1] * 60 + +m[2], b = +m[3] * 60 + +m[4];
+  return a + 60 <= b && b <= 1440 ? [a, b] : null;
+};
 const begintijden = (slot: string) => {
-  const [van, tot] = SLOTS[slot];
+  const [van, tot] = leesSlot(slot)!;
   const out: string[] = [];
-  for (let m = van * 60; m + 60 <= tot * 60; m += 30) {
+  for (let m = van; m + 60 <= tot && out.length < 32; m += 30) {
     out.push(String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"));
   }
   return out;
@@ -106,7 +114,7 @@ export default async (req: Request) => {
   const datum = url.searchParams.get("datum") ?? "";
   const slot = url.searchParams.get("slot") ?? "";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(datum)) return json({ fout: "Ongeldige datum." }, 400);
-  if (!SLOTS[slot]) return json({ fout: "Ongeldig tijdvak." }, 400);
+  if (!leesSlot(slot)) return json({ fout: "Ongeldig tijdvak." }, 400);
   const vandaag = new Date().toISOString().slice(0, 10);
   const dagen = (Date.parse(datum) - Date.parse(vandaag)) / 86400000;
   if (dagen < -1 || dagen > 60) return json({ fout: "Datum ligt buiten het bereik." }, 400);
