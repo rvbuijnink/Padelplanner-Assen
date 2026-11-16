@@ -1,0 +1,241 @@
+{
+  "version": "8",
+  "dialect": "postgres",
+  "id": "c1090390-6723-4b11-a73c-db3b462ab79e",
+  "prevIds": [
+    "00000000-0000-0000-0000-000000000000"
+  ],
+  "ddl": [
+    {
+      "isRlsEnabled": false,
+      "name": "beschikbaarheid",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "spelers",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "speler_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "beschikbaarheid"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "week",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "beschikbaarheid"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "tijdvakken",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "beschikbaarheid"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "bijgewerkt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "beschikbaarheid"
+    },
+    {
+      "type": "serial",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "slug",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "naam",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "niveau",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "wens_niveaus",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "duren",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "frequentie",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "club_voorkeur",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "bijgewerkt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "speler_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "spelers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "beschikbaarheid_speler_id_spelers_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "beschikbaarheid"
+    },
+    {
+      "columns": [
+        "speler_id",
+        "week"
+      ],
+      "nameExplicit": false,
+      "name": "beschikbaarheid_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "beschikbaarheid"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "spelers_pkey",
+      "schema": "public",
+      "table": "spelers",
+      "entityType": "pks"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "slug"
+      ],
+      "nullsNotDistinct": false,
+      "name": "spelers_slug_key",
+      "schema": "public",
+      "table": "spelers",
+      "entityType": "uniques"
+    }
+  ],
+  "renames": []
+}

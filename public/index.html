@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Padelplanner Assen</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --tekst:#1c2230; --zacht:#5d6678; --lijn:#dde1e8; --accent:#1f6feb; --goed:#12805c; --let:#9a6700; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12151b; --card:#1b202a; --tekst:#e8ebf1; --zacht:#9aa3b5; --lijn:#2c3342; --accent:#5b9dff; --goed:#3ccf9b; --let:#e3b341; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--tekst); }
+  header, main, .demo { max-width: 860px; margin: 0 auto; padding: 0 16px; }
+  header { padding-top: 24px; }
+  h1 { margin:0 0 4px; font-size: 1.6rem; }
+  h2 { margin:0 0 12px; font-size: 1.15rem; }
+  .sub { margin:0; color:var(--zacht); }
+  .demo { margin-top:16px; }
+  .demo p { margin:0; padding:10px 12px; border:1px solid var(--let); border-radius:8px; color:var(--let); font-size:.9rem; }
+  section { background:var(--card); border:1px solid var(--lijn); border-radius:12px; padding:16px; margin:16px 0; }
+  fieldset { border:0; padding:0; margin:0 0 16px; }
+  legend { font-weight:600; padding:0; margin-bottom:6px; }
+  .hint { color:var(--zacht); font-size:.88rem; margin:0 0 8px; }
+  label.optie { display:inline-flex; align-items:center; gap:6px; margin:0 14px 6px 0; cursor:pointer; }
+  input[type=text], select { font:inherit; padding:8px 10px; border:1px solid var(--lijn); border-radius:8px; background:var(--bg); color:inherit; width:100%; max-width:320px; }
+  input[type=checkbox], input[type=radio] { width:18px; height:18px; }
+  .raster { width:100%; border-collapse:collapse; font-size:.9rem; }
+  .raster th, .raster td { padding:6px 4px; border-bottom:1px solid var(--lijn); text-align:center; }
+  .raster th:first-child, .raster td:first-child { text-align:left; white-space:nowrap; }
+  .scroll { overflow-x:auto; }
+  button { font:inherit; padding:10px 16px; border-radius:8px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; }
+  button.rustig { background:transparent; color:var(--accent); }
+  .melding { margin-top:10px; min-height:1.3em; font-size:.92rem; }
+  .fout { color:#d1242f; } .ok { color:var(--goed); }
+  .moment { border:1px solid var(--lijn); border-radius:10px; padding:12px; margin-bottom:10px; }
+  .moment h3 { margin:0 0 4px; font-size:1.02rem; }
+  .moment ul { margin:6px 0 0; padding-left:18px; }
+  .badge { display:inline-block; font-size:.75rem; padding:1px 8px; border-radius:99px; border:1px solid var(--goed); color:var(--goed); margin-left:6px; }
+  .let { color:var(--let); }
+  table.banen { width:100%; border-collapse:collapse; font-size:.92rem; }
+  table.banen th, table.banen td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--lijn); vertical-align:top; }
+  tr.goedkoopst td { background:color-mix(in srgb, var(--goed) 12%, transparent); }
+  .rij { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  .rij > div { flex:1 1 200px; }
+  nav.tabs { display:flex; gap:6px; flex-wrap:wrap; margin:16px 0 0; }
+  nav.tabs button { background:transparent; color:var(--tekst); border-color:var(--lijn); }
+  nav.tabs button[aria-selected=true] { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .paneel[hidden] { display:none; }
+  table.voorkeur { border-collapse:collapse; font-size:.92rem; }
+  table.voorkeur th, table.voorkeur td { padding:6px 10px; border-bottom:1px solid var(--lijn); text-align:center; }
+  table.voorkeur th:first-child, table.voorkeur td:first-child { text-align:left; }
+  .weken { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .weken button { background:transparent; color:var(--tekst); border-color:var(--lijn); text-align:left; padding:8px 12px; line-height:1.3; }
+  .weken button[aria-pressed=true] { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .weken small { display:block; font-size:.78rem; }
+  .st-ingevuld { color:var(--goed); } .st-open { color:var(--zacht); } .st-binnenkort { color:var(--let); } .st-te-laat { color:#d1242f; }
+  a.knop { display:inline-block; font-size:.9rem; padding:6px 12px; border-radius:8px; border:1px solid var(--accent); background:var(--accent); color:#fff; text-decoration:none; }
+  a.knop.rustig { background:transparent; color:var(--accent); }
+  .boekrij { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:4px; }
+  .clubkaart { border:1px solid var(--lijn); border-radius:10px; padding:12px; margin-bottom:12px; }
+  .clubkaart h3 { margin:0 0 8px; font-size:1.02rem; }
+  .clubkaart .rij > div { flex:1 1 140px; }
+  .clubkaart input[type=text] { max-width:none; }
+  .knoppen { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+  .uitleg { padding:10px 12px; border-radius:8px; background:color-mix(in srgb, var(--accent) 8%, transparent); font-size:.92rem; margin-bottom:12px; }
+  table.overzicht { border-collapse:collapse; font-size:.9rem; width:100%; }
+  table.overzicht th, table.overzicht td { padding:6px; border-bottom:1px solid var(--lijn); text-align:center; }
+  table.overzicht th:first-child, table.overzicht td:first-child { text-align:left; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Padelplanner Assen</h1>
+  <p class="sub">Vind een viertal én een baan die past, in Assen en omgeving.</p>
+</header>
+<div class="demo"><p>Vrije banen van Valley Padel Assen en Padel Rolde worden live opgehaald. Bij Peakz en Plaza zie je vrije banen alleen na inloggen: gebruik daar de boekknop of Padelchecker.</p></div>
+
+<main>
+  <section>
+    <div class="rij">
+      <div>
+        <label for="naam"><strong>Je naam</strong></label>
+        <input type="text" id="naam" maxlength="40" placeholder="Bijv. Sanne">
+      </div>
+    </div>
+    <p class="hint" id="wie-info">Vul je naam in. Ben je al bekend, dan worden je instellingen en beschikbaarheid automatisch geladen.</p>
+    <nav class="tabs" role="tablist">
+      <button type="button" role="tab" data-tab="instellingen" aria-selected="true">Vaste instellingen</button>
+      <button type="button" role="tab" data-tab="beschikbaarheid" aria-selected="false">Beschikbaarheid per week</button>
+      <button type="button" role="tab" data-tab="planning" aria-selected="false">Planning</button>
+      <button type="button" role="tab" data-tab="beheer" aria-selected="false">Beheer clubs</button>
+    </nav>
+  </section>
+
+  <!-- ===== Vaste instellingen ===== -->
+  <div class="paneel" id="paneel-instellingen">
+    <section>
+      <h2>Vaste instellingen</h2>
+      <p class="hint">Deze vul je één keer in. Je kunt ze altijd aanpassen.</p>
+      <form id="profiel" autocomplete="off">
+        <fieldset id="niveau-veld">
+          <legend>Speelsterkte: op welk niveau speel je ongeveer?</legend>
+        </fieldset>
+        <fieldset id="wens-veld">
+          <legend>Met welk niveau wil je spelen?</legend>
+          <p class="hint">Je mag meerdere ranges aanvinken.</p>
+        </fieldset>
+        <fieldset id="duur-veld">
+          <legend>Hoe lang wil je spelen?</legend>
+          <p class="hint">Kies beide om meer opties te vinden.</p>
+        </fieldset>
+        <fieldset>
+          <legend>Hoe vaak wil je met de groep spelen?</legend>
+          <select id="frequentie"></select>
+        </fieldset>
+        <fieldset>
+          <legend>Baanvoorkeur: waar wil je wel of niet spelen?</legend>
+          <p class="hint">Bij "Niet" plant de planner je nooit bij die club in.</p>
+          <div class="scroll"><table class="voorkeur" id="voorkeur"></table></div>
+        </fieldset>
+        <button type="submit">Instellingen opslaan</button>
+        <div class="melding" id="profiel-melding" role="status"></div>
+      </form>
+    </section>
+  </div>
+
+  <!-- ===== Beschikbaarheid ===== -->
+  <div class="paneel" id="paneel-beschikbaarheid" hidden>
+    <section>
+      <h2>Beschikbaarheid per week</h2>
+      <div class="uitleg">Vul je beschikbaarheid <strong>uiterlijk 2 weken van tevoren</strong> in, zodat er op tijd een baan geboekt kan worden. Je kunt het daarna altijd nog aanpassen.</div>
+      <div class="weken" id="weken"></div>
+      <h3 id="week-titel" style="margin:0 0 8px;font-size:1.02rem"></h3>
+      <p class="hint" id="week-status"></p>
+      <div class="scroll"><table class="raster" id="raster"></table></div>
+      <div class="knoppen">
+        <button type="button" id="week-opslaan">Week opslaan</button>
+        <button type="button" class="rustig" id="week-kopieer">Neem over van vorige ingevulde week</button>
+        <button type="button" class="rustig" id="week-niet">Ik kan deze week niet</button>
+      </div>
+      <div class="melding" id="week-melding" role="status"></div>
+    </section>
+  </div>
+
+  <!-- ===== Planning ===== -->
+  <div class="paneel" id="paneel-planning" hidden>
+    <section>
+      <h2>Wie heeft ingevuld?</h2>
+      <div class="scroll"><table class="overzicht" id="overzicht"></table></div>
+      <p class="hint">✓ ingevuld · – nog open · ! deadline voorbij en nog niet ingevuld</p>
+    </section>
+
+    <section>
+      <h2>Beste momenten</h2>
+      <p class="hint" id="planner-info"></p>
+      <div id="planner"></div>
+      <button type="button" class="rustig" id="ververs">Vernieuw</button>
+    </section>
+
+    <section>
+      <h2>Banen en prijzen per tijdstip</h2>
+      <div class="rij">
+        <div><label for="kies-dag"><strong>Dag</strong></label><select id="kies-dag"></select></div>
+        <div><label for="kies-slot"><strong>Tijdvak</strong></label><select id="kies-slot"></select></div>
+      </div>
+      <div class="scroll"><table class="banen" id="banen"></table></div>
+      <p class="hint">Prijs per baan en per persoon (4 spelers). Doordeweeks ochtend en middag geldt het daltarief als de club dat heeft. De goedkoopste boekbare club is gemarkeerd.</p>
+      <p><a class="knop rustig" id="padelchecker" target="_blank" rel="noopener">Vergelijk vrije banen op Padelchecker ↗</a></p>
+    </section>
+  </div>
+
+  <!-- ===== Beheer ===== -->
+  <div class="paneel" id="paneel-beheer" hidden>
+    <section>
+      <h2>Beheer clubs</h2>
+      <p class="hint">Vul hier de echte prijzen en de boekingshorizon per club in. Kijk daarvoor in de boekingsomgeving van de club hoe ver vooruit de kalender loopt en wanneer nieuwe dagen opengaan. Lege prijsvelden betekenen "onbekend".</p>
+      <div class="rij"><div>
+        <label for="beheercode"><strong>Beheercode</strong></label>
+        <input type="password" id="beheercode" placeholder="Alleen nodig als die is ingesteld">
+      </div></div>
+      <div id="beheer"></div>
+    </section>
+  </div>
+</main>
+
+<script src="planner.js"></script>
+<script>
+(async function () {
+  const P = window.Planner;
+  const today = new Date();
+  const weken = P.weken(today);
+  const planDagen = [].concat(...weken.map(P.dagenVanWeek)).filter((d) => P.dagenTussen(today, P.parseKey(d)) >= 0);
+  let clubs = [];
+  let spelers = [];
+  let actieveWeek = null;
+
+  const $ = (id) => document.getElementById(id);
+  function h(tag, attrs, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (k === 'class') e.className = v;
+      else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) if (kid != null) e.append(kid.nodeType ? kid : document.createTextNode(kid));
+    return e;
+  }
+  const bewaar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+  const lees = (k) => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
+  const euro = (n) => n.toLocaleString('nl-NL', { style: 'currency', currency: 'EUR' });
+  const dagLabel = (key) => P.parseKey(key).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
+  const kortLabel = (key) => P.parseKey(key).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+  const slotLabel = (id) => P.SLOTS.find((s) => s.id === id).label;
+  const tijdLabel = (iso) => new Date(iso).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const headers = (extra) => Object.assign({}, extra || {});
+  const naamKey = () => $('naam').value.trim().toLowerCase();
+  const ik = () => spelers.find((x) => x.naam.toLowerCase() === naamKey()) || null;
+  function meld(id, tekst, soort) { const m = $(id); m.textContent = tekst; m.className = 'melding' + (soort ? ' ' + soort : ''); }
+
+  // ---- Tabs ----
+  function toonTab(naam) {
+    document.querySelectorAll('nav.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === naam)));
+    document.querySelectorAll('.paneel').forEach((p) => (p.hidden = p.id !== 'paneel-' + naam));
+    bewaar('padel-tab', naam);
+  }
+  document.querySelectorAll('nav.tabs button').forEach((b) => b.addEventListener('click', () => toonTab(b.dataset.tab)));
+
+  // ---- Vaste instellingen opbouwen ----
+  function optie(type, name, value, label) {
+    return h('label', { class: 'optie' }, h('input', { type, name, value }), label);
+  }
+  P.NIVEAUS.forEach((n) => $('niveau-veld').append(optie('radio', 'niveau', n.id, n.label)));
+  P.NIVEAUS.forEach((n) => $('wens-veld').append(optie('checkbox', 'wens', n.id, n.label)));
+  P.DUREN.forEach((d) => $('duur-veld').append(optie('checkbox', 'duur', d.id, d.label)));
+  P.FREQUENTIES.forEach((f) => $('frequentie').append(h('option', { value: f.id }, f.label)));
+
+  function bouwVoorkeur() {
+    $('voorkeur').replaceChildren(
+      h('thead', {}, h('tr', {}, h('th', {}, 'Club'), P.VOORKEUREN.map((v) => h('th', {}, v.label)))),
+      h('tbody', {}, clubs.map((c) => h('tr', {}, h('td', {}, c.naam),
+        P.VOORKEUREN.map((v) => h('td', {}, h('input', { type: 'radio', name: 'club-' + c.id, value: v.id, checked: v.id === 'wel', 'aria-label': c.naam + ': ' + v.label })))))));
+  }
+
+  function vulProfiel(r) {
+    document.querySelectorAll('input[name=niveau]').forEach((i) => (i.checked = !!r && i.value === r.niveau));
+    document.querySelectorAll('input[name=wens]').forEach((i) => (i.checked = !!r && r.wensNiveaus.includes(i.value)));
+    document.querySelectorAll('input[name=duur]').forEach((i) => (i.checked = !!r && r.duren.includes(i.value)));
+    $('frequentie').value = r ? r.frequentie : 'wanneer-het-lukt';
+    clubs.forEach((c) => {
+      const v = r ? P.voorkeurVan(r, c.id) : 'wel';
+      document.querySelectorAll('input[name="club-' + c.id + '"]').forEach((i) => (i.checked = i.value === v));
+    });
+  }
+
+  // ---- Beschikbaarheid per week ----
+  function statusVan(speler, week) {
+    const st = P.weekStatus(speler, week, today);
+    if (st.soort === 'ingevuld') return { klasse: 'st-ingevuld', kort: '✓ ingevuld', lang: 'Ingevuld, laatst aangepast ' + tijdLabel(st.bijgewerkt) + '. Je kunt het nog aanpassen.' };
+    if (st.soort === 'te-laat') return { klasse: 'st-te-laat', kort: '! nog invullen', lang: 'De deadline (' + dagLabel(st.deadline) + ') is voorbij. Vul deze week zo snel mogelijk in.' };
+    const wanneer = st.dagenTotDeadline === 0 ? 'vandaag' : st.dagenTotDeadline === 1 ? 'morgen' : 'vóór ' + dagLabel(st.deadline);
+    return {
+      klasse: st.dagenTotDeadline <= 3 ? 'st-binnenkort' : 'st-open',
+      kort: 'invullen ' + (st.dagenTotDeadline <= 1 ? wanneer : 'vóór ' + kortLabel(st.deadline)),
+      lang: 'Nog niet ingevuld. Graag invullen ' + wanneer + ' (2 weken van tevoren).'
+    };
+  }
+
+  function standaardWeek() {
+    const r = ik();
+    // De eerste week die nog niet is ingevuld, anders de week waarvan de deadline nu is
+    const open = weken.find((w) => P.weekStatus(r, w, today).soort !== 'ingevuld');
+    return open || weken[Math.min(2, weken.length - 1)];
+  }
+
+  function toonWeken() {
+    const r = ik();
+    if (!actieveWeek) actieveWeek = standaardWeek();
+    $('weken').replaceChildren(...weken.map((w, i) => {
+      const st = statusVan(r, w);
+      const titel = i === 0 ? 'Deze week' : i === 1 ? 'Volgende week' : 'Over ' + i + ' weken';
+      const b = h('button', { type: 'button', 'aria-pressed': String(w === actieveWeek) },
+        h('strong', {}, titel), h('small', {}, kortLabel(w) + ' – ' + kortLabel(P.dagenVanWeek(w)[6])), h('small', { class: st.klasse }, st.kort));
+      b.addEventListener('click', () => { actieveWeek = w; toonWeken(); toonRaster(); meld('week-melding', ''); });
+      return b;
+    }));
+  }
+
+  function toonRaster(tijdvakken) {
+    const r = ik();
+    const w = actieveWeek;
+    const st = statusVan(r, w);
+    $('week-titel').textContent = 'Week van ' + dagLabel(w) + ' t/m ' + dagLabel(P.dagenVanWeek(w)[6]);
+    $('week-status').className = 'hint ' + st.klasse;
+    $('week-status').textContent = r ? st.lang : 'Sla eerst je vaste instellingen op; daarna kun je per week je beschikbaarheid invullen.';
+    const huidig = tijdvakken || (r && r.weken[w] ? r.weken[w].tijdvakken : {});
+    const raster = $('raster');
+    raster.replaceChildren(
+      h('thead', {}, h('tr', {}, h('th', {}, 'Dag'), P.SLOTS.map((s) => h('th', {}, s.label)))),
+      h('tbody', {}, P.dagenVanWeek(w).map((d) => {
+        const voorbij = P.dagenTussen(today, P.parseKey(d)) < 0;
+        return h('tr', {}, h('td', {}, dagLabel(d)),
+          P.SLOTS.map((s) => h('td', {}, h('input', {
+            type: 'checkbox', 'data-dag': d, 'data-slot': s.id, 'aria-label': dagLabel(d) + ' ' + s.label,
+            checked: (huidig[d] || []).includes(s.id), disabled: voorbij
+          }))));
+      })));
+  }
+
+  function leesRaster() {
+    const out = {};
+    document.querySelectorAll('#raster input:checked').forEach((i) => {
+      (out[i.dataset.dag] = out[i.dataset.dag] || []).push(i.dataset.slot);
+    });
+    return out;
+  }
+
+  async function slaWeekOp(tijdvakken) {
+    const naam = $('naam').value.trim();
+    if (!naam) { meld('week-melding', 'Vul bovenaan je naam in.', 'fout'); return; }
+    if (!ik()) { meld('week-melding', 'Sla eerst je vaste instellingen op.', 'fout'); toonTab('instellingen'); return; }
+    try {
+      const r = await fetch('/api/beschikbaarheid', {
+        method: 'PUT', headers: headers({ 'content-type': 'application/json' }),
+        body: JSON.stringify({ naam, week: actieveWeek, tijdvakken })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');
+      const leeg = !Object.keys(tijdvakken).length;
+      meld('week-melding', leeg ? 'Opgeslagen: je kunt deze week niet.' : 'Opgeslagen. Je kunt dit later nog aanpassen.', 'ok');
+      await laadSpelers();
+      toonAlles();
+    } catch (err) { meld('week-melding', err.message, 'fout'); }
+  }
+
+  $('week-opslaan').addEventListener('click', () => {
+    const t = leesRaster();
+    if (!Object.keys(t).length && !confirm('Je hebt niets aangevinkt. Opslaan als "kan deze week niet"?')) return;
+    slaWeekOp(t);
+  });
+  $('week-niet').addEventListener('click', () => slaWeekOp({}));
+  $('week-kopieer').addEventListener('click', () => {
+    const r = ik();
+    const eerder = r ? Object.keys(r.weken).filter((w) => w < actieveWeek).sort().pop() : null;
+    if (!eerder) { meld('week-melding', 'Er is nog geen eerdere week ingevuld om over te nemen.', 'fout'); return; }
+    // Zelfde weekdagen en tijdvakken overnemen
+    const doel = P.dagenVanWeek(actieveWeek), bron = P.dagenVanWeek(eerder);
+    const t = {};
+    bron.forEach((d, i) => { const sl = r.weken[eerder].tijdvakken[d]; if (sl && sl.length) t[doel[i]] = sl.slice(); });
+    toonRaster(t);
+    meld('week-melding', 'Overgenomen van de week van ' + dagLabel(eerder) + '. Controleer en klik op "Week opslaan".');
+  });
+
+  // ---- Data laden ----
+  let basisClubs = [];
+  let padelcheckerUrl = 'https://www.padelchecker.nl/';
+  async function laadClubs() {
+    if (!basisClubs.length) {
+      const r = await fetch('clubs.json');
+      const data = await r.json();
+      basisClubs = data.clubs;
+      if (data.padelchecker) padelcheckerUrl = data.padelchecker;
+    }
+    let gegevens = {};
+    try {
+      const r = await fetch('/api/clubs', { headers: headers() });
+      if (r.ok) gegevens = (await r.json()).clubs || {};
+    } catch (e) {}
+    clubs = P.voegClubsSamen(basisClubs, gegevens);
+  }
+  async function laadSpelers() {
+    try {
+      const r = await fetch('/api/spelers', { headers: headers() });
+      const data = await r.json();
+      if (!r.ok) { $('planner-info').textContent = data.fout || 'Gegevens laden mislukt.'; spelers = []; return; }
+      $('planner-info').textContent = '';
+      spelers = data.spelers;
+    } catch (e) {
+      $('planner-info').textContent = 'De gegevens kunnen alleen geladen worden op de Netlify-site (niet als los bestand).';
+      spelers = [];
+    }
+  }
+
+  // ---- Planning: wie heeft ingevuld ----
+  function toonOverzicht() {
+    const t = $('overzicht');
+    if (!spelers.length) { t.replaceChildren(h('tbody', {}, h('tr', {}, h('td', {}, 'Nog geen spelers.')))); return; }
+    t.replaceChildren(
+      h('thead', {}, h('tr', {}, h('th', {}, 'Speler'), weken.map((w) => h('th', {}, 'Week ' + kortLabel(w), h('br'), h('span', { class: 'hint' }, 'deadline ' + kortLabel(P.deadline(w))))))),
+      h('tbody', {}, spelers.map((s) => h('tr', {}, h('td', {}, s.naam), weken.map((w) => {
+        const st = P.weekStatus(s, w, today);
+        if (st.soort === 'ingevuld') {
+          const leeg = !Object.keys(s.weken[w].tijdvakken).length;
+          return h('td', { class: 'st-ingevuld', title: 'Aangepast ' + tijdLabel(st.bijgewerkt) }, leeg ? '✓ kan niet' : '✓');
+        }
+        return st.soort === 'te-laat' ? h('td', { class: 'st-te-laat' }, '!') : h('td', { class: 'st-open' }, '–');
+      })))));
+  }
+
+  // ---- Prijstekst ----
+  function prijsTekst(club, dag, slot) {
+    const a = P.prijs(club, 60, dag, slot), b = P.prijs(club, 90, dag, slot);
+    if (!a) return 'prijs onbekend';
+    const bron = club.prijsBron === 'demo' ? ' (voorbeeldprijs)' : '';
+    const dal = a.dal ? ' (daltarief)' : '';
+    return '1 uur: ' + euro(a.perBaan) + ' per baan, ' + euro(a.perPersoon) + ' p.p. · 1,5 uur: ' + euro(b.perBaan) + ' per baan, ' + euro(b.perPersoon) + ' p.p.' + dal + bron;
+  }
+  function statusTekst(club, st) {
+    if (st.soort === 'verleden') return 'voorbij';
+    if (st.soort === 'boekbaar') return 'boekbaar – kijk bij de club of er een baan vrij is';
+    const wanneer = st.dagenTotOpening <= 0 ? 'vandaag' : st.dagenTotOpening === 1 ? 'morgen' : 'over ' + st.dagenTotOpening + ' dagen (' + dagLabel(st.opentOp) + ')';
+    const tijd = club.opentOm ? ' om ' + club.opentOm : '';
+    return 'nog niet boekbaar, opent ' + wanneer + tijd + (club.horizonBevestigd ? '' : ' (horizon van ' + club.horizonDagen + ' dagen is een aanname)');
+  }
+  function boekKnop(club, st) {
+    if (st.soort === 'verleden') return null;
+    return h('a', { class: 'knop' + (st.soort === 'boekbaar' ? '' : ' rustig'), href: club.boeken, target: '_blank', rel: 'noopener', title: 'Boeken via ' + (club.systeem || 'de club') },
+      st.soort === 'boekbaar' ? 'Boek bij ' + club.naam + ' ↗' : 'Naar ' + club.naam + ' ↗');
+  }
+
+  // ---- Live vrije banen (via /api/banen) ----
+  const liveCache = new Map();
+  function haalLive(dag, slot) {
+    const key = dag + '|' + slot;
+    if (!liveCache.has(key)) {
+      liveCache.set(key, fetch('/api/banen?datum=' + dag + '&slot=' + slot)
+        .then((r) => (r.ok ? r.json() : null)).catch(() => null)
+        .then((d) => { if (!d) liveCache.delete(key); return d; }));
+    }
+    return liveCache.get(key);
+  }
+  // Live situatie van één club in een tijdvak voor de gevraagde speelduren.
+  function liveVoor(live, club, duren) {
+    const c = live && live.clubs && live.clubs[club.id];
+    if (!c || !c.live) return null;
+    if (!c.boekbaar) return { soort: 'nog-niet', boekbaarTot: c.boekbaarTot, link: c.boekingsLink };
+    const tijden = [];
+    for (const st of c.starts) {
+      for (const duur of duren) {
+        const banen = st.banen.filter((b) => b.prijzen[duur] != null);
+        if (!banen.length) continue;
+        const goedkoopst = banen.slice().sort((x, y) => x.prijzen[duur] - y.prijzen[duur])[0];
+        tijden.push({ tijd: st.tijd, duur, aantal: banen.length, prijs: goedkoopst.prijzen[duur], baanId: goedkoopst.id });
+        break; // per begintijd de eerste speelduur die past (voorkeur van de groep)
+      }
+    }
+    return tijden.length ? { soort: 'vrij', tijden, link: c.boekingsLink } : { soort: 'vol', link: c.boekingsLink };
+  }
+  const liveLink = (lv, dag, t) => lv.link + '?date=' + dag + '&time=' + t.tijd + '&duration=' + t.duur + '&court=' + encodeURIComponent(t.baanId);
+  const duurLabel = (d) => (String(d) === '60' ? '1 uur' : '1,5 uur');
+  function liveRegel(club, lv, dag) {
+    if (lv.soort === 'vol') return [h('span', { class: 'st-te-laat' }, 'live: geen dubbelbaan vrij in dit tijdvak'), ' ', h('a', { class: 'knop rustig', href: lv.link + '?date=' + dag, target: '_blank', rel: 'noopener' }, 'Bekijk ' + club.naam + ' ↗')];
+    if (lv.soort === 'nog-niet') return [h('span', { class: 'let' }, 'nog niet boekbaar' + (lv.boekbaarTot ? ' (nu boekbaar t/m ' + dagLabel(lv.boekbaarTot) + ')' : '')), ' ', h('a', { class: 'knop rustig', href: lv.link, target: '_blank', rel: 'noopener' }, 'Naar ' + club.naam + ' ↗')];
+    return [h('span', { class: 'st-ingevuld' }, 'live vrij:'), h('div', { class: 'boekrij' }, lv.tijden.map((t) =>
+      h('a', { class: 'knop', href: liveLink(lv, dag, t), target: '_blank', rel: 'noopener', title: t.aantal + (t.aantal === 1 ? ' baan' : ' banen') + ' vrij' },
+        t.tijd + ' · ' + duurLabel(t.duur) + ' · ' + euro(t.prijs / 4) + ' p.p.' + (t.aantal > 1 ? ' (' + t.aantal + ' banen)' : ''))))];
+  }
+
+  // ---- Planner tonen ----
+  let plannerRun = 0;
+  async function toonPlanner() {
+    const run = ++plannerRun;
+    const box = $('planner');
+    box.replaceChildren();
+    if (!spelers.length) { if (!$('planner-info').textContent) $('planner-info').textContent = 'Nog geen spelers.'; return; }
+    $('planner-info').textContent = spelers.length + ' speler(s) doen mee. De planner kijkt naar ' + kortLabel(planDagen[0]) + ' t/m ' + kortLabel(planDagen[planDagen.length - 1]) + '.';
+    const kandidaten = P.plan(spelers, clubs, today, 8, planDagen);
+    if (!kandidaten.length) {
+      box.append(h('p', {}, 'Er is nog geen moment waarop vier mensen kunnen die qua niveau, speelduur en baanvoorkeur bij elkaar passen. Meer tijdvakken, niveau-ranges, beide speelduren of minder clubs op "Niet" helpt.'));
+      return;
+    }
+    box.append(h('p', { class: 'hint' }, 'Vrije banen ophalen bij de clubs…'));
+    const lives = await Promise.all(kandidaten.map((m) => (clubs.some((c) => c.live) ? haalLive(m.datum, m.slot.id) : null)));
+    if (run !== plannerRun) return;
+    // Per moment: live gegevens toevoegen en bepalen of er zeker een baan vrij is.
+    const momenten = kandidaten.map((m, i) => {
+      const opties = m.opties.map((o) => Object.assign({}, o, { lv: o.club.live ? liveVoor(lives[i], o.club, m.duren) : null }));
+      const rang = (o) => (o.lv ? { vrij: 0, vol: 3, 'nog-niet': 2 }[o.lv.soort] : o.status.soort === 'boekbaar' ? 1 : 2);
+      opties.sort((a, b) => rang(a) - rang(b) || ((a.lv && a.lv.tijden ? a.lv.tijden[0].prijs : a.prijs ? a.prijs.perBaan : 1e9) - (b.lv && b.lv.tijden ? b.lv.tijden[0].prijs : b.prijs ? b.prijs.perBaan : 1e9)));
+      const zeker = opties.some((o) => o.lv && o.lv.soort === 'vrij');
+      const misschien = opties.some((o) => !o.lv && o.status.soort === 'boekbaar');
+      return Object.assign({}, m, { opties, klasse: zeker ? 0 : misschien ? 1 : 2 });
+    });
+    momenten.sort((a, b) => a.klasse - b.klasse || b.spelers.length - a.spelers.length || a.datum.localeCompare(b.datum));
+    box.replaceChildren();
+    momenten.slice(0, 3).forEach((m, i) => {
+      const duren = m.duren.map(duurLabel).join(' of ');
+      const label = m.klasse === 0 ? h('span', { class: 'badge' }, 'baan vrij') : m.klasse === 1 ? h('span', { class: 'badge', style: 'border-color:var(--let);color:var(--let)' }, 'controleer bij club') : h('span', { class: 'badge', style: 'border-color:#d1242f;color:#d1242f' }, 'geen baan gevonden');
+      box.append(h('div', { class: 'moment' },
+        h('h3', {}, (i + 1) + '. ' + dagLabel(m.datum) + ', ' + slotLabel(m.slot.id), label),
+        h('div', {}, m.spelers.length + ' spelers kunnen: ' + m.spelers.join(', ')),
+        h('div', { class: 'hint' }, 'Voorbeeldviertal: ' + m.voorbeeldGroep.join(', ') + ' (speelduur: ' + duren + ')'),
+        m.opties.length
+          ? h('ul', {}, m.opties.slice(0, 4).map((o) => h('li', {}, h('strong', {}, o.club.naam), ': ',
+              o.lv ? liveRegel(o.club, o.lv, m.datum)
+                   : [statusTekst(o.club, o.status), ' – ', prijsTekst(o.club, m.datum, m.slot.id), h('div', { class: 'boekrij' }, boekKnop(o.club, o.status))],
+              o.club.opmerking ? h('div', { class: 'hint' }, o.club.opmerking) : null)))
+          : h('div', { class: 'let' }, 'Geen club met een boekbare baan waar dit viertal wil spelen.'),
+        h('div', { class: 'boekrij' }, h('a', { class: 'knop rustig', href: padelcheckerUrl, target: '_blank', rel: 'noopener' }, 'Vergelijk vrije banen op Padelchecker ↗'))));
+    });
+    box.append(h('p', { class: 'hint' }, 'Live: ' + clubs.filter((c) => c.live).map((c) => c.naam).join(' en ') + ' (dubbelbanen, ververst elke 10 minuten). Bij de andere clubs kun je de vrije banen alleen na inloggen zien; gebruik daarvoor de boekknop of Padelchecker.'));
+  }
+
+  // ---- Banenoverzicht ----
+  let banenRun = 0;
+  async function toonBanen() {
+    const run = ++banenRun;
+    const dag = $('kies-dag').value, slot = $('kies-slot').value;
+    const r = ik();
+    const live = clubs.some((c) => c.live) ? await haalLive(dag, slot) : null;
+    if (run !== banenRun) return;
+    const duren = r ? r.duren : ['90', '60'];
+    const rijen = clubs.map((c) => ({ c, st: P.status(c, dag, slot, today), p: P.prijs(c, 60, dag, slot), v: r ? P.voorkeurVan(r, c.id) : null, lv: c.live ? liveVoor(live, c, duren) : null }));
+    const pp = (x) => (x.lv ? (x.lv.tijden ? x.lv.tijden[0].prijs / 4 : null) : x.st.soort === 'boekbaar' && x.p ? x.p.perPersoon : null);
+    const kandidaten = rijen.filter((x) => pp(x) != null && x.v !== 'niet');
+    const min = kandidaten.length ? Math.min(...kandidaten.map(pp)) : null;
+    const vLabel = (v) => (P.VOORKEUREN.find((x) => x.id === v) || {}).label;
+    $('banen').replaceChildren(
+      h('thead', {}, h('tr', {}, h('th', {}, 'Club'), h('th', {}, 'Jouw voorkeur'), h('th', {}, 'Beschikbaarheid'), h('th', {}, 'Prijs'))),
+      h('tbody', {}, rijen.map((x) => {
+        const goedkoopst = min != null && kandidaten.includes(x) && pp(x) === min;
+        return h('tr', { class: goedkoopst ? 'goedkoopst' : '' },
+          h('td', {}, h('a', { href: x.c.boeken, target: '_blank', rel: 'noopener' }, x.c.naam), goedkoopst ? h('span', { class: 'badge' }, 'goedkoopst') : null),
+          h('td', { class: x.v === 'niet' ? 'st-te-laat' : '' }, x.v ? vLabel(x.v) : '–'),
+          h('td', {}, x.lv ? liveRegel(x.c, x.lv, dag) : [statusTekst(x.c, x.st), h('div', { class: 'boekrij' }, boekKnop(x.c, x.st))]),
+          h('td', {}, x.lv ? (x.lv.tijden ? 'live, zie tijden' : '–') : prijsTekst(x.c, dag, slot)));
+      })));
+  }
+
+  // ---- Beheer clubs ----
+  function toonBeheer() {
+    const veld = (club, key, label, waarde, extra) => h('div', {},
+      h('label', { for: 'b-' + club.id + '-' + key }, label),
+      h('input', Object.assign({ type: 'text', id: 'b-' + club.id + '-' + key, value: waarde == null ? '' : String(waarde).replace('.', ',') }, extra || {})));
+    $('beheer').replaceChildren(...basisClubs.map((basis) => {
+      const c = clubs.find((x) => x.id === basis.id);
+      const melding = h('div', { class: 'melding', role: 'status' });
+      const prijsUit = c.prijsBron === 'demo' ? null : c.prijs60;
+      const knop = h('button', { type: 'button' }, 'Opslaan');
+      const kaart = h('div', { class: 'clubkaart' },
+        h('h3', {}, c.naam, ' ', h('a', { class: 'knop rustig', href: c.boeken, target: '_blank', rel: 'noopener' }, 'Boekingspagina ↗')),
+        h('p', { class: 'hint' }, 'Boekingssysteem: ' + (c.systeem || 'onbekend') + (c.bijgewerkt ? ' · laatst bijgewerkt ' + tijdLabel(c.bijgewerkt) : ' · nog niet ingevuld, er staan standaardwaarden')),
+        h('div', { class: 'rij' },
+          veld(c, 'prijs60', 'Prijs per baan, 1 uur (€)', prijsUit, { inputmode: 'decimal' }),
+          veld(c, 'prijs90', 'Prijs per baan, 1,5 uur (€)', c.prijs90, { inputmode: 'decimal' })),
+        h('div', { class: 'rij' },
+          veld(c, 'dalPrijs60', 'Daltarief 1 uur (€, ma–vr tot 17:00)', c.dalPrijs60, { inputmode: 'decimal' }),
+          veld(c, 'dalPrijs90', 'Daltarief 1,5 uur (€)', c.dalPrijs90, { inputmode: 'decimal' })),
+        h('div', { class: 'rij' },
+          veld(c, 'horizonDagen', 'Hoeveel dagen vooruit boekbaar', c.horizonDagen, { inputmode: 'numeric' }),
+          veld(c, 'opentOm', 'Nieuwe dag opent om (UU:MM)', c.opentOm, { placeholder: 'bijv. 00:00' })),
+        h('label', { class: 'optie' }, h('input', { type: 'checkbox', id: 'b-' + c.id + '-bevestigd', checked: !!c.horizonBevestigd }), 'Horizon gecontroleerd bij de club'),
+        h('div', {}, veld(c, 'opmerking', 'Opmerking (zichtbaar bij de planning)', c.opmerking, { maxlength: '300', placeholder: 'bijv. reserveren via de app, lidmaatschap nodig' })),
+        h('div', { class: 'knoppen' }, knop), melding);
+      knop.addEventListener('click', async () => {
+        const v = (k) => $('b-' + c.id + '-' + k).value.trim();
+        try {
+          const r = await fetch('/api/clubs', {
+            method: 'PUT', headers: headers({ 'content-type': 'application/json', 'x-beheercode': $('beheercode').value }),
+            body: JSON.stringify({ clubId: c.id, prijs60: v('prijs60'), prijs90: v('prijs90'), dalPrijs60: v('dalPrijs60'), dalPrijs90: v('dalPrijs90'),
+              horizonDagen: v('horizonDagen'), opentOm: v('opentOm'), opmerking: v('opmerking'), horizonBevestigd: $('b-' + c.id + '-bevestigd').checked })
+          });
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');
+          await laadClubs();
+          toonPlanner(); toonBanen(); toonBeheer();
+          const m = document.querySelector('#beheer .clubkaart:nth-child(' + (basisClubs.indexOf(basis) + 1) + ') .melding');
+          if (m) { m.textContent = 'Opgeslagen.'; m.className = 'melding ok'; }
+        } catch (err) { melding.textContent = err.message; melding.className = 'melding fout'; }
+      });
+      return kaart;
+    }));
+  }
+
+  function toonWie() {
+    const r = ik();
+    $('wie-info').textContent = !naamKey()
+      ? 'Vul je naam in. Ben je al bekend, dan worden je instellingen en beschikbaarheid automatisch geladen.'
+      : r ? 'Welkom terug, ' + r.naam + '. Je instellingen en beschikbaarheid zijn geladen.'
+          : 'Nieuwe speler: vul eerst je vaste instellingen in en sla ze op.';
+  }
+
+  function toonAlles() { toonWie(); toonWeken(); toonRaster(); toonOverzicht(); toonPlanner(); toonBanen(); toonBeheer(); }
+
+  // ---- Vaste instellingen opslaan ----
+  $('profiel').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const naam = $('naam').value.trim();
+    const niveau = (document.querySelector('input[name=niveau]:checked') || {}).value;
+    const wensNiveaus = [...document.querySelectorAll('input[name=wens]:checked')].map((i) => i.value);
+    const duren = [...document.querySelectorAll('input[name=duur]:checked')].map((i) => i.value);
+    const clubVoorkeur = {};
+    clubs.forEach((c) => { clubVoorkeur[c.id] = (document.querySelector('input[name="club-' + c.id + '"]:checked') || {}).value || 'wel'; });
+    if (!naam) { meld('profiel-melding', 'Vul bovenaan je naam in.', 'fout'); $('naam').focus(); return; }
+    if (!niveau) { meld('profiel-melding', 'Kies je speelsterkte.', 'fout'); return; }
+    if (!wensNiveaus.length) { meld('profiel-melding', 'Kies met welk niveau je wilt spelen.', 'fout'); return; }
+    if (!duren.length) { meld('profiel-melding', 'Kies minstens één speelduur (1 uur en/of 1,5 uur).', 'fout'); return; }
+    if (Object.values(clubVoorkeur).every((v) => v === 'niet')) { meld('profiel-melding', 'Kies minstens één club waar je wel wilt spelen.', 'fout'); return; }
+    const nieuw = !ik();
+    try {
+      const r = await fetch('/api/profiel', {
+        method: 'PUT', headers: headers({ 'content-type': 'application/json' }),
+        body: JSON.stringify({ naam, niveau, wensNiveaus, duren, frequentie: $('frequentie').value, clubVoorkeur })
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');
+      bewaar('padel-naam', naam);
+      meld('profiel-melding', nieuw ? 'Opgeslagen. Vul nu je beschikbaarheid per week in.' : 'Instellingen bijgewerkt.', 'ok');
+      await laadSpelers();
+      actieveWeek = null;
+      toonAlles();
+      if (nieuw) setTimeout(() => toonTab('beschikbaarheid'), 900);
+    } catch (err) { meld('profiel-melding', err.message, 'fout'); }
+  });
+
+  // ---- Gebeurtenissen ----
+  function naamGewijzigd() {
+    bewaar('padel-naam', $('naam').value.trim());
+    vulProfiel(ik());
+    actieveWeek = null;
+    toonAlles();
+  }
+  $('naam').addEventListener('change', naamGewijzigd);
+  $('ververs').addEventListener('click', async () => { liveCache.clear(); await laadSpelers(); toonOverzicht(); toonPlanner(); toonBanen(); });
+  $('kies-dag').addEventListener('change', toonBanen);
+  $('kies-slot').addEventListener('change', toonBanen);
+
+  // ---- Start ----
+  planDagen.forEach((d) => $('kies-dag').append(h('option', { value: d }, dagLabel(d))));
+  P.SLOTS.forEach((s) => $('kies-slot').append(h('option', { value: s.id }, s.label)));
+  $('kies-slot').value = 'avond2';
+  $('naam').value = lees('padel-naam');
+  await laadClubs();
+  $('padelchecker').href = padelcheckerUrl;
+  bouwVoorkeur();
+  await laadSpelers();
+  vulProfiel(ik());
+  toonAlles();
+  const tab = lees('padel-tab');
+  toonTab(['instellingen', 'beschikbaarheid', 'planning', 'beheer'].includes(tab) ? tab : ik() ? 'beschikbaarheid' : 'instellingen');
+})();
+</script>
+</body>
+</html>

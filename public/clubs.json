@@ -1,5 +1,5 @@
 {
-  "_uitleg": "Pas horizonDagen aan zodra je in de boekingsomgeving van de club hebt gezien hoe ver vooruit de kalender loopt, en zet horizonBevestigd op true. prijsPerBaan60 is de prijs per baan voor 60 minuten; 90 minuten wordt als 1,5x berekend. prijsBron 'demo' = voorbeeldwaarde.",
+  "_uitleg": "Standaardwaarden per club. Echte prijzen, boekingshorizon en openingstijd van de boekingen vul je in via het tabblad Beheer; die overschrijven de waarden hier. prijsPerBaan60 hier is een voorbeeldprijs (prijsBron 'demo').",
   "clubs": [
     {
       "id": "peakz",
@@ -11,7 +11,9 @@
       "opentOm": "00:00",
       "prijsPerBaan60": 31,
       "prijsBron": "demo",
-      "boeken": "https://www.peakzpadel.nl/"
+      "boeken": "https://www.peakzpadel.nl/reserveren/court-booking/reservation",
+      "systeem": "Peakz-app / website (Foys)",
+      "live": false
     },
     {
       "id": "valley",
@@ -23,7 +25,9 @@
       "opentOm": null,
       "prijsPerBaan60": 35,
       "prijsBron": "demo",
-      "boeken": "https://assen.valleypadel.nl"
+      "boeken": "https://assen.valleypadel.nl/nl/booking",
+      "systeem": "RacketIQ",
+      "live": true
     },
     {
       "id": "plaza",
@@ -35,7 +39,9 @@
       "opentOm": null,
       "prijsPerBaan60": 25,
       "prijsBron": "demo",
-      "boeken": "https://plazasportzassen.nl"
+      "boeken": "https://www.meetandplay.nl/club/88140",
+      "systeem": "KNLTB Meet & Play",
+      "live": false
     },
     {
       "id": "rolde",
@@ -47,7 +53,11 @@
       "opentOm": null,
       "prijsPerBaan60": null,
       "prijsBron": "onbekend",
-      "boeken": "https://padelrolde.nl"
+      "boeken": "https://boeken.padelrolde.nl/nl/booking",
+      "systeem": "RacketIQ",
+      "live": true
     }
-  ]
+  ],
+  "padelchecker": "https://www.padelchecker.nl/",
+  "_live": "live = true: vrije banen worden live opgehaald via /api/banen (RacketIQ). Peakz (Foys) en Plaza (Meet & Play) tonen beschikbaarheid alleen na inloggen."
 }
