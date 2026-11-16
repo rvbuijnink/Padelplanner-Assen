@@ -1,10 +1,12 @@
 // API voor de Padelplanner.
-// GET /api/spelers           -> alle spelers met vaste instellingen en beschikbaarheid per week
-// PUT /api/profiel           -> vaste instellingen van één speler opslaan (zelfde naam = aanpassen)
-// PUT /api/beschikbaarheid   -> beschikbaarheid van één speler voor één week opslaan
+// Spelers loggen in met Netlify Identity; elke speler hoort bij één account.
+// GET /api/spelers           -> alle spelers met vaste instellingen en beschikbaarheid per week (ingelogd)
+// PUT /api/profiel           -> je eigen vaste instellingen opslaan (ingelogd)
+// PUT /api/beschikbaarheid   -> je eigen beschikbaarheid voor één week opslaan (ingelogd)
 // GET /api/clubs             -> door de beheerder ingevulde clubgegevens (prijzen, boekingshorizon)
 // PUT /api/clubs             -> clubgegevens van één club opslaan (beheercode nodig als BEHEER_CODE is ingesteld)
-import { eq, gte } from "drizzle-orm";
+import { and, eq, gte, isNull } from "drizzle-orm";
+import { getUser, verifyRequestOrigin, AuthError } from "@netlify/identity";
 import { db } from "../../db/index.js";
 import { spelers, beschikbaarheid, clubGegevens } from "../../db/schema.js";
 
@@ -69,15 +71,14 @@ async function leesBody(req: Request) {
   }
 }
 
-async function zoekSpeler(naam: unknown) {
-  const n = typeof naam === "string" ? naam.trim() : "";
-  const key = slug(n);
-  if (!key) return null;
-  const [s] = await db.select().from(spelers).where(eq(spelers.slug, key));
+type Gebruiker = { id: string };
+
+async function mijnSpeler(user: Gebruiker) {
+  const [s] = await db.select().from(spelers).where(eq(spelers.userId, user.id));
   return s ?? null;
 }
 
-async function alleSpelers() {
+async function alleSpelers(user: Gebruiker) {
   // Alleen weken die nog niet voorbij zijn zijn relevant.
   const vanaf = plusDagen(vandaag(), -7);
   const [rijen, weken] = await Promise.all([
@@ -89,6 +90,7 @@ async function alleSpelers() {
     const perWeek: Record<string, { tijdvakken: Record<string, string[]>; bijgewerkt: string }> = {};
     for (const w of eigen) perWeek[w.week] = { tijdvakken: w.tijdvakken, bijgewerkt: w.bijgewerkt.toISOString() };
     return {
+      eigen: s.userId === user.id,
       naam: s.naam,
       niveau: s.niveau,
       wensNiveaus: s.wensNiveaus,
@@ -101,7 +103,7 @@ async function alleSpelers() {
   });
 }
 
-async function slaProfielOp(b: any) {
+async function slaProfielOp(user: Gebruiker, b: any) {
   const naam = typeof b.naam === "string" ? b.naam.trim() : "";
   if (naam.length < 1 || naam.length > 40) return fout("Naam is verplicht (max 40 tekens).");
   const key = slug(naam);
@@ -130,15 +132,31 @@ async function slaProfielOp(b: any) {
     clubVoorkeur,
     bijgewerkt: new Date(),
   };
-  await db
-    .insert(spelers)
-    .values({ slug: key, ...waarden })
-    .onConflictDoUpdate({ target: spelers.slug, set: waarden });
+  const mij = await mijnSpeler(user);
+  const [zelfdeNaam] = await db.select().from(spelers).where(eq(spelers.slug, key));
+  if (zelfdeNaam && zelfdeNaam.id !== mij?.id && zelfdeNaam.userId)
+    return fout("Deze naam is al in gebruik door een andere speler. Kies een andere naam (bijv. met je achternaam erbij).", 409);
+
+  if (mij) {
+    // Bestaande speler: naam en instellingen bijwerken.
+    if (zelfdeNaam && zelfdeNaam.id !== mij.id) return fout("Er bestaat al een speler met deze naam.", 409);
+    await db.update(spelers).set({ slug: key, ...waarden }).where(eq(spelers.id, mij.id));
+  } else if (zelfdeNaam) {
+    // Speler van vóór het inloggen met dezelfde naam: aan dit account koppelen.
+    const bijgewerkt = await db
+      .update(spelers)
+      .set({ userId: user.id, ...waarden })
+      .where(and(eq(spelers.id, zelfdeNaam.id), isNull(spelers.userId)))
+      .returning({ id: spelers.id });
+    if (!bijgewerkt.length) return fout("Deze naam is al in gebruik door een andere speler.", 409);
+  } else {
+    await db.insert(spelers).values({ slug: key, userId: user.id, ...waarden });
+  }
   return json({ ok: true });
 }
 
-async function slaBeschikbaarheidOp(b: any) {
-  const speler = await zoekSpeler(b.naam);
+async function slaBeschikbaarheidOp(user: Gebruiker, b: any) {
+  const speler = await mijnSpeler(user);
   if (!speler) return fout("Sla eerst je vaste instellingen op, daarna kun je je beschikbaarheid invullen.", 404);
 
   const week = b.week;
@@ -212,12 +230,18 @@ export default async (req: Request) => {
   try {
     if (pad === "/api/clubs" && req.method === "GET") return json({ clubs: await alleClubGegevens() });
     if (pad === "/api/clubs" && (req.method === "PUT" || req.method === "POST")) return await slaClubOp(req, await leesBody(req));
-    if (pad === "/api/spelers" && req.method === "GET") return json({ spelers: await alleSpelers() });
-    if (pad === "/api/profiel" && (req.method === "PUT" || req.method === "POST")) return await slaProfielOp(await leesBody(req));
-    if (pad === "/api/beschikbaarheid" && (req.method === "PUT" || req.method === "POST"))
-      return await slaBeschikbaarheidOp(await leesBody(req));
+
+    // Alles hieronder alleen voor ingelogde spelers.
+    const user = await getUser();
+    if (!user) return fout("Log eerst in.", 401);
+    const schrijven = req.method === "PUT" || req.method === "POST";
+    if (schrijven) verifyRequestOrigin(req);
+    if (pad === "/api/spelers" && req.method === "GET") return json({ spelers: await alleSpelers(user) });
+    if (pad === "/api/profiel" && schrijven) return await slaProfielOp(user, await leesBody(req));
+    if (pad === "/api/beschikbaarheid" && schrijven) return await slaBeschikbaarheidOp(user, await leesBody(req));
     return fout("Niet gevonden.", 404);
   } catch (e) {
+    if (e instanceof AuthError) return fout("Dit verzoek is niet toegestaan.", 403);
     const bericht = e instanceof Error ? e.message : "Onbekende fout.";
     if (bericht === "Bericht te groot." || bericht === "Ongeldige invoer.") return fout(bericht);
     console.error(e);

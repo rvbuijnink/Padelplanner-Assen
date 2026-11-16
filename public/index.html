@@ -105,7 +105,47 @@
 <div class="demo"><p>Vrije banen van Valley Padel Assen en Padel Rolde worden live opgehaald. Bij Peakz en Plaza zie je vrije banen alleen na inloggen: gebruik daar de boekknop of Padelchecker.</p></div>
 
 <main>
-  <section>
+  <section id="login-sectie" hidden>
+    <h2>Inloggen</h2>
+    <div id="uitgelogd">
+      <p class="hint">Log in met je account om je instellingen en beschikbaarheid door te geven en te zien wie wanneer kan spelen.</p>
+      <div class="weken" id="login-keuze">
+        <button type="button" id="tab-login" aria-pressed="true">Inloggen</button>
+        <button type="button" id="tab-signup" aria-pressed="false">Account maken</button>
+      </div>
+      <form id="login-form" autocomplete="on">
+        <div class="rij">
+          <div id="signup-naam-veld" hidden>
+            <label for="signup-naam"><strong>Je naam</strong></label>
+            <input type="text" id="signup-naam" maxlength="40" autocomplete="name" placeholder="Bijv. Sanne">
+          </div>
+          <div>
+            <label for="email"><strong>E-mailadres</strong></label>
+            <input type="email" id="email" required autocomplete="email">
+          </div>
+          <div>
+            <label for="wachtwoord"><strong>Wachtwoord</strong></label>
+            <input type="password" id="wachtwoord" required minlength="6" autocomplete="current-password">
+          </div>
+        </div>
+        <div class="knoppen">
+          <button type="submit" id="login-knop">Inloggen</button>
+          <button type="button" class="link" id="vergeten">Wachtwoord vergeten?</button>
+        </div>
+      </form>
+    </div>
+    <form id="nieuw-wachtwoord" hidden>
+      <p class="hint" id="nieuw-wachtwoord-uitleg">Kies een nieuw wachtwoord.</p>
+      <div class="rij"><div>
+        <label for="nieuw-ww"><strong>Nieuw wachtwoord</strong></label>
+        <input type="password" id="nieuw-ww" required minlength="6" autocomplete="new-password">
+      </div></div>
+      <button type="submit">Wachtwoord opslaan</button>
+    </form>
+    <div class="melding" id="login-melding" role="status"></div>
+  </section>
+
+  <section id="app-kop" hidden>
     <div id="wie" class="wie"></div>
     <nav class="tabs" role="tablist">
       <button type="button" role="tab" data-tab="instellingen" aria-selected="true">Vaste instellingen</button>
@@ -123,7 +163,7 @@
       <form id="profiel" autocomplete="off">
         <fieldset>
           <legend><label for="naam">Je naam</label></legend>
-          <p class="hint" id="naam-hint">Zo zien de andere spelers je in de planning.</p>
+          <p class="hint">Zo zien de andere spelers je in de planning.</p>
           <input type="text" id="naam" maxlength="40" placeholder="Bijv. Sanne">
         </fieldset>
         <fieldset id="niveau-veld">
@@ -213,6 +253,7 @@
   </div>
 </main>
 
+<script src="auth.js"></script>
 <script src="planner.js"></script>
 <script>
 (async function () {
@@ -241,16 +282,9 @@
   const kortLabel = (key) => P.parseKey(key).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
   const tijdLabel = (iso) => new Date(iso).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   const headers = (extra) => Object.assign({}, extra || {});
-  // Wie je bent wordt op dit apparaat onthouden; de naam vul je in bij de vaste instellingen.
-  let mijnNaam = '';
-  const ik = () => (mijnNaam && spelers.find((x) => x.naam.toLowerCase() === mijnNaam.toLowerCase())) || null;
-  function wordSpeler(naam) {
-    mijnNaam = naam || '';
-    bewaar('padel-naam', mijnNaam);
-    vulProfiel(ik());
-    actieveWeek = null;
-    toonAlles();
-  }
+  // Je speler hoort bij het account waarmee je bent ingelogd.
+  let gebruiker = null;
+  const ik = () => spelers.find((x) => x.eigen) || null;
   function meld(id, tekst, soort) { const m = $(id); m.textContent = tekst; m.className = 'melding' + (soort ? ' ' + soort : ''); }
 
   // ---- Tabs ----
@@ -278,8 +312,7 @@
   }
 
   function vulProfiel(r) {
-    $('naam').value = r ? r.naam : mijnNaam;
-    $('naam-hint').textContent = r ? 'Zo zien de andere spelers je in de planning. Typ je hier een andere naam, dan word je als nieuwe speler opgeslagen.' : 'Zo zien de andere spelers je in de planning.';
+    $('naam').value = r ? r.naam : (gebruiker && gebruiker.name) || '';
     document.querySelectorAll('input[name=niveau]').forEach((i) => (i.checked = !!r && i.value === r.niveau));
     document.querySelectorAll('input[name=wens]').forEach((i) => (i.checked = !!r && r.wensNiveaus.includes(i.value)));
     document.querySelectorAll('input[name=duur]').forEach((i) => (i.checked = !!r && r.duren.includes(i.value)));
@@ -426,11 +459,10 @@
 
   async function slaWeekOp(tijdvakken) {
     if (!ik()) { meld('week-melding', 'Sla eerst je vaste instellingen op.', 'fout'); toonTab('instellingen'); return; }
-    const naam = ik().naam;
     try {
       const r = await fetch('/api/beschikbaarheid', {
         method: 'PUT', headers: headers({ 'content-type': 'application/json' }),
-        body: JSON.stringify({ naam, week: actieveWeek, tijdvakken })
+        body: JSON.stringify({ week: actieveWeek, tijdvakken })
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');
@@ -480,6 +512,7 @@
     try {
       const r = await fetch('/api/spelers', { headers: headers() });
       const data = await r.json();
+      if (r.status === 401) { spelers = []; gebruiker = null; return; }
       if (!r.ok) { $('planner-info').textContent = data.fout || 'Gegevens laden mislukt.'; spelers = []; return; }
       $('planner-info').textContent = '';
       spelers = data.spelers;
@@ -685,22 +718,115 @@
 
   function toonWie() {
     const r = ik();
-    const box = $('wie');
-    if (r) {
-      const wissel = h('button', { type: 'button', class: 'link' }, 'Ben jij dit niet? Wissel van speler');
-      wissel.addEventListener('click', () => wordSpeler(''));
-      box.replaceChildren(h('span', {}, 'Je bent ', h('strong', {}, r.naam), '.'), wissel);
-      return;
+    const uit = h('button', { type: 'button', class: 'rustig' }, 'Uitloggen');
+    uit.addEventListener('click', loguit);
+    $('wie').replaceChildren(
+      h('span', {}, 'Ingelogd als ', h('strong', {}, r ? r.naam : (gebruiker.name || gebruiker.email)),
+        r ? h('span', { class: 'hint' }, ' (' + gebruiker.email + ')') : null),
+      uit,
+      r ? null : h('span', { class: 'hint', style: 'margin:0;flex-basis:100%' }, 'Welkom! Vul eerst je vaste instellingen in en sla ze op.'));
+  }
+
+  // ---- Inloggen (Netlify Identity) ----
+  const Auth = window.Auth;
+  let modus = 'login';
+  let inviteToken = null;
+  function zetModus(m) {
+    modus = m;
+    $('tab-login').setAttribute('aria-pressed', String(m === 'login'));
+    $('tab-signup').setAttribute('aria-pressed', String(m === 'signup'));
+    $('signup-naam-veld').hidden = m !== 'signup';
+    $('login-knop').textContent = m === 'signup' ? 'Account maken' : 'Inloggen';
+    $('wachtwoord').autocomplete = m === 'signup' ? 'new-password' : 'current-password';
+    $('vergeten').hidden = m === 'signup';
+    meld('login-melding', '');
+  }
+  $('tab-login').addEventListener('click', () => zetModus('login'));
+  $('tab-signup').addEventListener('click', () => zetModus('signup'));
+
+  function authFout(err) {
+    if (!Auth || err instanceof Auth.MissingIdentityError) return 'Inloggen werkt alleen op de Netlify-site.';
+    if (err instanceof Auth.AuthError) {
+      if (err.status === 401) return 'E-mailadres of wachtwoord klopt niet, of je e-mailadres is nog niet bevestigd.';
+      if (err.status === 403) return 'Zelf een account maken is uitgeschakeld. Vraag de beheerder om een uitnodiging.';
+      if (err.status === 422) return 'Controleer je e-mailadres en kies een wachtwoord van minstens 6 tekens.';
+      return err.message;
     }
-    if (!spelers.length) {
-      box.replaceChildren(h('span', { class: 'hint', style: 'margin:0' }, 'Welkom! Vul je vaste instellingen in, inclusief je naam, en sla ze op.'));
-      return;
-    }
-    const kies = h('select', { id: 'kies-speler', 'aria-label': 'Wie ben jij?' },
-      h('option', { value: '' }, 'Nieuwe speler'), spelers.map((s) => h('option', { value: s.naam }, s.naam)));
-    kies.addEventListener('change', () => { if (kies.value) wordSpeler(kies.value); });
-    box.replaceChildren(h('label', { for: 'kies-speler' }, h('strong', {}, 'Wie ben jij?')), kies,
-      h('span', { class: 'hint', style: 'margin:0' }, 'Kies je naam, of vul als nieuwe speler je vaste instellingen in.'));
+    return 'Er ging iets mis. Probeer het opnieuw.';
+  }
+
+  function toonAuth() {
+    const aan = !!gebruiker;
+    $('login-sectie').hidden = aan;
+    $('app-kop').hidden = !aan;
+    if (!aan) document.querySelectorAll('.paneel').forEach((p) => (p.hidden = true));
+  }
+
+  async function naIngelogd(u) {
+    gebruiker = u;
+    await laadSpelers();
+    if (!gebruiker) { toonAuth(); return; }
+    toonAuth();
+    vulProfiel(ik());
+    actieveWeek = null;
+    toonAlles();
+    const tab = lees('padel-tab');
+    toonTab(ik() ? (['instellingen', 'beschikbaarheid', 'planning', 'beheer'].includes(tab) ? tab : 'beschikbaarheid') : 'instellingen');
+  }
+
+  async function loguit() {
+    try { await Auth.logout(); } catch (e) {}
+    gebruiker = null;
+    spelers = [];
+    toonAuth();
+  }
+
+  $('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!Auth) { meld('login-melding', 'Inloggen werkt alleen op de Netlify-site.', 'fout'); return; }
+    const email = $('email').value.trim(), ww = $('wachtwoord').value;
+    try {
+      if (modus === 'signup') {
+        const naam = $('signup-naam').value.trim();
+        if (!naam) { meld('login-melding', 'Vul je naam in.', 'fout'); return; }
+        const u = await Auth.signup(email, ww, { full_name: naam });
+        if (u.confirmedAt) { await naIngelogd(u); }
+        else meld('login-melding', 'Bijna klaar: bevestig je account via de link in de e-mail die we je hebben gestuurd.', 'ok');
+      } else {
+        await naIngelogd(await Auth.login(email, ww));
+      }
+      $('wachtwoord').value = '';
+    } catch (err) { meld('login-melding', authFout(err), 'fout'); }
+  });
+
+  $('vergeten').addEventListener('click', async () => {
+    const email = $('email').value.trim();
+    if (!email) { meld('login-melding', 'Vul eerst je e-mailadres in.', 'fout'); return; }
+    try {
+      await Auth.requestPasswordRecovery(email);
+      meld('login-melding', 'Als dit adres bekend is, ontvang je een e-mail om een nieuw wachtwoord te kiezen.', 'ok');
+    } catch (err) { meld('login-melding', authFout(err), 'fout'); }
+  });
+
+  $('nieuw-wachtwoord').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const ww = $('nieuw-ww').value;
+    try {
+      const u = inviteToken ? await Auth.acceptInvite(inviteToken, ww) : await Auth.updateUser({ password: ww });
+      inviteToken = null;
+      $('nieuw-wachtwoord').hidden = true;
+      $('uitgelogd').hidden = false;
+      $('nieuw-ww').value = '';
+      await naIngelogd(u);
+    } catch (err) { meld('login-melding', authFout(err), 'fout'); }
+  });
+
+  function vraagNieuwWachtwoord(uitleg) {
+    $('login-sectie').hidden = false;
+    $('app-kop').hidden = true;
+    $('uitgelogd').hidden = true;
+    $('nieuw-wachtwoord').hidden = false;
+    $('nieuw-wachtwoord-uitleg').textContent = uitleg;
   }
 
   function toonAlles() { toonWie(); toonWeken(); toonRaster(); toonOverzicht(); toonPlanner(); toonBanen(); toonBeheer(); }
@@ -719,7 +845,7 @@
     if (!wensNiveaus.length) { meld('profiel-melding', 'Kies met welk niveau je wilt spelen.', 'fout'); return; }
     if (!duren.length) { meld('profiel-melding', 'Kies minstens één speelduur (1 uur en/of 1,5 uur).', 'fout'); return; }
     if (Object.values(clubVoorkeur).every((v) => v === 'niet')) { meld('profiel-melding', 'Kies minstens één club waar je wel wilt spelen.', 'fout'); return; }
-    const nieuw = !spelers.some((x) => x.naam.toLowerCase() === naam.toLowerCase());
+    const nieuw = !ik();
     try {
       const r = await fetch('/api/profiel', {
         method: 'PUT', headers: headers({ 'content-type': 'application/json' }),
@@ -727,8 +853,6 @@
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');
-      mijnNaam = naam;
-      bewaar('padel-naam', naam);
       meld('profiel-melding', nieuw ? 'Opgeslagen. Vul nu je beschikbaarheid per week in.' : 'Instellingen bijgewerkt.', 'ok');
       await laadSpelers();
       actieveWeek = null;
@@ -760,15 +884,21 @@
   }
   $('kies-van').value = '19:00';
   $('kies-tot').value = '22:00';
-  mijnNaam = lees('padel-naam');
   await laadClubs();
   $('padelchecker').href = padelcheckerUrl;
   bouwVoorkeur();
-  await laadSpelers();
-  vulProfiel(ik());
-  toonAlles();
-  const tab = lees('padel-tab');
-  toonTab(['instellingen', 'beschikbaarheid', 'planning', 'beheer'].includes(tab) ? tab : ik() ? 'beschikbaarheid' : 'instellingen');
+  // Terugkomen via een link uit een e-mail (bevestigen, wachtwoord vergeten, uitnodiging).
+  if (Auth) {
+    try {
+      const cb = await Auth.handleAuthCallback();
+      if (cb && cb.type === 'recovery') { toonAuth(); vraagNieuwWachtwoord('Kies een nieuw wachtwoord voor je account.'); return; }
+      if (cb && cb.type === 'invite') { inviteToken = cb.token; toonAuth(); vraagNieuwWachtwoord('Je bent uitgenodigd. Kies een wachtwoord om je account te activeren.'); return; }
+      if (cb && cb.type === 'confirmation') meld('login-melding', 'Je e-mailadres is bevestigd.', 'ok');
+    } catch (err) { meld('login-melding', authFout(err), 'fout'); }
+  }
+  const u = Auth ? await Auth.getUser() : null;
+  if (u) await naIngelogd(u);
+  else toonAuth();
 })();
 </script>
 </body>

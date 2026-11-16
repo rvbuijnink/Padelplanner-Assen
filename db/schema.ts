@@ -4,6 +4,9 @@ import { pgTable, serial, text, timestamp, integer, jsonb, primaryKey, date, boo
 export const spelers = pgTable("spelers", {
   id: serial().primaryKey(),
   slug: text().notNull().unique(),
+  // Netlify Identity-account van de speler. Leeg bij spelers van vóór het inloggen; die worden
+  // gekoppeld zodra iemand met dezelfde naam inlogt en zijn instellingen opslaat.
+  userId: text("user_id").unique(),
   naam: text().notNull(),
   niveau: text().notNull(),
   wensNiveaus: jsonb("wens_niveaus").$type<string[]>().notNull(),
