@@ -10,7 +10,30 @@ import { spelers, beschikbaarheid, clubGegevens } from "../../db/schema.js";
 
 const NIVEAUS = ["n80", "n85", "n90", "n95"];
 const DUREN = ["60", "90"];
-const SLOTS = ["ochtend", "middag", "avond1", "avond2"];
+// Oude dagdelen worden omgezet naar tijden; nieuwe invoer is "UU:MM-UU:MM" (per half uur).
+const OUDE_SLOTS: Record<string, [number, number]> = { ochtend: [540, 720], middag: [720, 1020], avond1: [1020, 1140], avond2: [1140, 1320] };
+const TIJD = /^([01]\d|2[0-4]):(00|30)-([01]\d|2[0-4]):(00|30)$/;
+const hhmm = (m: number) => String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+function leesTijden(lijst: unknown[]): string[] | null {
+  const r: [number, number][] = [];
+  for (const x of lijst) {
+    if (typeof x !== "string") return null;
+    if (OUDE_SLOTS[x]) { r.push([...OUDE_SLOTS[x]]); continue; }
+    const m = TIJD.exec(x);
+    if (!m) return null;
+    const a = +m[1] * 60 + +m[2], b = +m[3] * 60 + +m[4];
+    if (a >= b || b > 1440) return null;
+    r.push([a, b]);
+  }
+  r.sort((x, y) => x[0] - y[0]);
+  const out: [number, number][] = [];
+  for (const [a, b] of r) {
+    const l = out[out.length - 1];
+    if (l && a <= l[1]) l[1] = Math.max(l[1], b);
+    else out.push([a, b]);
+  }
+  return out.map(([a, b]) => hhmm(a) + "-" + hhmm(b));
+}
 const FREQ = ["wanneer-het-lukt", "tweewekelijks", "wekelijks", "2x-per-week"];
 const CLUBS = ["peakz", "valley", "plaza", "rolde"];
 const VOORKEUR = ["wel", "niet"];
@@ -131,8 +154,9 @@ async function slaBeschikbaarheidOp(b: any) {
     const verschil = dagenTussen(week, d);
     if (verschil < 0 || verschil > 6) return fout("Datum valt buiten deze week.");
     const sl = invoer[d];
-    if (!Array.isArray(sl) || !sl.every((x: string) => SLOTS.includes(x))) return fout("Ongeldig tijdvak.");
-    if (sl.length) tijdvakken[d] = [...new Set<string>(sl)];
+    const tijden = Array.isArray(sl) && sl.length <= 12 ? leesTijden(sl) : null;
+    if (!tijden) return fout("Ongeldige tijd.");
+    if (tijden.length) tijdvakken[d] = tijden;
   }
 
   await db
