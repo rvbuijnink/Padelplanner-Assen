@@ -4,7 +4,7 @@ Een kleine Netlify-site waarmee een groep padelspelers hun niveau, gewenste tege
 
 ## Wat zit erin
 
-- **Vaste instellingen** per speler (één keer invullen, altijd aan te passen): speelsterkte (8–8,5 / 8,5–9 / 9–9,5 / 9,5–10), met welk niveau je wilt spelen, speelduur (1 uur en/of 1,5 uur), hoe vaak je wilt spelen (wanneer het lukt / om de week / iedere week / 2x per week) en per club of je er wel of niet wilt spelen.
+- **Vaste instellingen** per speler (één keer invullen, altijd aan te passen): je naam (wordt op het apparaat onthouden), speelsterkte (8–8,5 / 8,5–9 / 9–9,5 / 9,5–10), met welk niveau je wilt spelen, speelduur (1 uur en/of 1,5 uur), hoe vaak je wilt spelen (wanneer het lukt / om de week / iedere week / 2x per week) en per club of je er wel of niet wilt spelen.
 - **Beschikbaarheid per week**: iedere week opnieuw invullen, uiterlijk 2 weken van tevoren (deadline = maandag twee weken voor de week). Je ziet deze week en drie weken vooruit, met per week de status (ingevuld / invullen vóór … / deadline voorbij). Daarna kun je het nog aanpassen. Per dag kies je met een schuifbalk je begintijd en eindtijd (07:00–23:00, per half uur), en eventueel meerdere tijden op één dag. Handig: "Neem over van vorige ingevulde week" en "Ik kan deze week niet".
 - **Wie heeft ingevuld**: overzicht per speler per week.
 - **Planner**: zoekt momenten waarop minstens vier mensen kunnen die bij elkaar passen. Spelers passen bij elkaar als ze elkaars niveau accepteren, minstens één speelduur gemeen hebben en er een club is waar niemand van het viertal "Niet" heeft gekozen. Daarna wordt op prijs gesorteerd.

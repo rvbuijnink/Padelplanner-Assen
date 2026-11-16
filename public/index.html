@@ -90,6 +90,8 @@
   .schuif input[type=range]::-moz-range-track { background:none; }
   .schuif input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; pointer-events:auto; width:18px; height:18px; margin-top:5px; border-radius:50%; background:var(--card); border:2px solid var(--accent); cursor:pointer; }
   .schuif input[type=range]::-moz-range-thumb { pointer-events:auto; width:14px; height:14px; border-radius:50%; background:var(--card); border:2px solid var(--accent); cursor:pointer; }
+  .wie { display:flex; gap:8px 12px; flex-wrap:wrap; align-items:center; }
+  .wie select { max-width:240px; }
   table.overzicht { border-collapse:collapse; font-size:.9rem; width:100%; }
   table.overzicht th, table.overzicht td { padding:6px; border-bottom:1px solid var(--lijn); text-align:center; }
   table.overzicht th:first-child, table.overzicht td:first-child { text-align:left; }
@@ -104,13 +106,7 @@
 
 <main>
   <section>
-    <div class="rij">
-      <div>
-        <label for="naam"><strong>Je naam</strong></label>
-        <input type="text" id="naam" maxlength="40" placeholder="Bijv. Sanne">
-      </div>
-    </div>
-    <p class="hint" id="wie-info">Vul je naam in. Ben je al bekend, dan worden je instellingen en beschikbaarheid automatisch geladen.</p>
+    <div id="wie" class="wie"></div>
     <nav class="tabs" role="tablist">
       <button type="button" role="tab" data-tab="instellingen" aria-selected="true">Vaste instellingen</button>
       <button type="button" role="tab" data-tab="beschikbaarheid" aria-selected="false">Beschikbaarheid per week</button>
@@ -125,6 +121,11 @@
       <h2>Vaste instellingen</h2>
       <p class="hint">Deze vul je één keer in. Je kunt ze altijd aanpassen.</p>
       <form id="profiel" autocomplete="off">
+        <fieldset>
+          <legend><label for="naam">Je naam</label></legend>
+          <p class="hint" id="naam-hint">Zo zien de andere spelers je in de planning.</p>
+          <input type="text" id="naam" maxlength="40" placeholder="Bijv. Sanne">
+        </fieldset>
         <fieldset id="niveau-veld">
           <legend>Speelsterkte: op welk niveau speel je ongeveer?</legend>
         </fieldset>
@@ -240,8 +241,16 @@
   const kortLabel = (key) => P.parseKey(key).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
   const tijdLabel = (iso) => new Date(iso).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   const headers = (extra) => Object.assign({}, extra || {});
-  const naamKey = () => $('naam').value.trim().toLowerCase();
-  const ik = () => spelers.find((x) => x.naam.toLowerCase() === naamKey()) || null;
+  // Wie je bent wordt op dit apparaat onthouden; de naam vul je in bij de vaste instellingen.
+  let mijnNaam = '';
+  const ik = () => (mijnNaam && spelers.find((x) => x.naam.toLowerCase() === mijnNaam.toLowerCase())) || null;
+  function wordSpeler(naam) {
+    mijnNaam = naam || '';
+    bewaar('padel-naam', mijnNaam);
+    vulProfiel(ik());
+    actieveWeek = null;
+    toonAlles();
+  }
   function meld(id, tekst, soort) { const m = $(id); m.textContent = tekst; m.className = 'melding' + (soort ? ' ' + soort : ''); }
 
   // ---- Tabs ----
@@ -269,6 +278,8 @@
   }
 
   function vulProfiel(r) {
+    $('naam').value = r ? r.naam : mijnNaam;
+    $('naam-hint').textContent = r ? 'Zo zien de andere spelers je in de planning. Typ je hier een andere naam, dan word je als nieuwe speler opgeslagen.' : 'Zo zien de andere spelers je in de planning.';
     document.querySelectorAll('input[name=niveau]').forEach((i) => (i.checked = !!r && i.value === r.niveau));
     document.querySelectorAll('input[name=wens]').forEach((i) => (i.checked = !!r && r.wensNiveaus.includes(i.value)));
     document.querySelectorAll('input[name=duur]').forEach((i) => (i.checked = !!r && r.duren.includes(i.value)));
@@ -414,9 +425,8 @@
   }
 
   async function slaWeekOp(tijdvakken) {
-    const naam = $('naam').value.trim();
-    if (!naam) { meld('week-melding', 'Vul bovenaan je naam in.', 'fout'); return; }
     if (!ik()) { meld('week-melding', 'Sla eerst je vaste instellingen op.', 'fout'); toonTab('instellingen'); return; }
+    const naam = ik().naam;
     try {
       const r = await fetch('/api/beschikbaarheid', {
         method: 'PUT', headers: headers({ 'content-type': 'application/json' }),
@@ -675,10 +685,22 @@
 
   function toonWie() {
     const r = ik();
-    $('wie-info').textContent = !naamKey()
-      ? 'Vul je naam in. Ben je al bekend, dan worden je instellingen en beschikbaarheid automatisch geladen.'
-      : r ? 'Welkom terug, ' + r.naam + '. Je instellingen en beschikbaarheid zijn geladen.'
-          : 'Nieuwe speler: vul eerst je vaste instellingen in en sla ze op.';
+    const box = $('wie');
+    if (r) {
+      const wissel = h('button', { type: 'button', class: 'link' }, 'Ben jij dit niet? Wissel van speler');
+      wissel.addEventListener('click', () => wordSpeler(''));
+      box.replaceChildren(h('span', {}, 'Je bent ', h('strong', {}, r.naam), '.'), wissel);
+      return;
+    }
+    if (!spelers.length) {
+      box.replaceChildren(h('span', { class: 'hint', style: 'margin:0' }, 'Welkom! Vul je vaste instellingen in, inclusief je naam, en sla ze op.'));
+      return;
+    }
+    const kies = h('select', { id: 'kies-speler', 'aria-label': 'Wie ben jij?' },
+      h('option', { value: '' }, 'Nieuwe speler'), spelers.map((s) => h('option', { value: s.naam }, s.naam)));
+    kies.addEventListener('change', () => { if (kies.value) wordSpeler(kies.value); });
+    box.replaceChildren(h('label', { for: 'kies-speler' }, h('strong', {}, 'Wie ben jij?')), kies,
+      h('span', { class: 'hint', style: 'margin:0' }, 'Kies je naam, of vul als nieuwe speler je vaste instellingen in.'));
   }
 
   function toonAlles() { toonWie(); toonWeken(); toonRaster(); toonOverzicht(); toonPlanner(); toonBanen(); toonBeheer(); }
@@ -692,12 +714,12 @@
     const duren = [...document.querySelectorAll('input[name=duur]:checked')].map((i) => i.value);
     const clubVoorkeur = {};
     clubs.forEach((c) => { clubVoorkeur[c.id] = (document.querySelector('input[name="club-' + c.id + '"]:checked') || {}).value || 'wel'; });
-    if (!naam) { meld('profiel-melding', 'Vul bovenaan je naam in.', 'fout'); $('naam').focus(); return; }
+    if (!naam) { meld('profiel-melding', 'Vul je naam in.', 'fout'); $('naam').focus(); return; }
     if (!niveau) { meld('profiel-melding', 'Kies je speelsterkte.', 'fout'); return; }
     if (!wensNiveaus.length) { meld('profiel-melding', 'Kies met welk niveau je wilt spelen.', 'fout'); return; }
     if (!duren.length) { meld('profiel-melding', 'Kies minstens één speelduur (1 uur en/of 1,5 uur).', 'fout'); return; }
     if (Object.values(clubVoorkeur).every((v) => v === 'niet')) { meld('profiel-melding', 'Kies minstens één club waar je wel wilt spelen.', 'fout'); return; }
-    const nieuw = !ik();
+    const nieuw = !spelers.some((x) => x.naam.toLowerCase() === naam.toLowerCase());
     try {
       const r = await fetch('/api/profiel', {
         method: 'PUT', headers: headers({ 'content-type': 'application/json' }),
@@ -705,6 +727,7 @@
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');
+      mijnNaam = naam;
       bewaar('padel-naam', naam);
       meld('profiel-melding', nieuw ? 'Opgeslagen. Vul nu je beschikbaarheid per week in.' : 'Instellingen bijgewerkt.', 'ok');
       await laadSpelers();
@@ -715,13 +738,6 @@
   });
 
   // ---- Gebeurtenissen ----
-  function naamGewijzigd() {
-    bewaar('padel-naam', $('naam').value.trim());
-    vulProfiel(ik());
-    actieveWeek = null;
-    toonAlles();
-  }
-  $('naam').addEventListener('change', naamGewijzigd);
   $('ververs').addEventListener('click', async () => { liveCache.clear(); await laadSpelers(); toonOverzicht(); toonPlanner(); toonBanen(); });
   $('kies-dag').addEventListener('change', toonBanen);
   // Van/tot: de eindtijd ligt altijd minstens een uur na de begintijd.
@@ -744,7 +760,7 @@
   }
   $('kies-van').value = '19:00';
   $('kies-tot').value = '22:00';
-  $('naam').value = lees('padel-naam');
+  mijnNaam = lees('padel-naam');
   await laadClubs();
   $('padelchecker').href = padelcheckerUrl;
   bouwVoorkeur();
