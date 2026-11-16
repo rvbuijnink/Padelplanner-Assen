@@ -83,10 +83,6 @@
         <label for="naam"><strong>Je naam</strong></label>
         <input type="text" id="naam" maxlength="40" placeholder="Bijv. Sanne">
       </div>
-      <div>
-        <label for="groepscode"><strong>Groepscode</strong></label>
-        <input type="text" id="groepscode" placeholder="Alleen nodig als de beheerder die heeft ingesteld">
-      </div>
     </div>
     <p class="hint" id="wie-info">Vul je naam in. Ben je al bekend, dan worden je instellingen en beschikbaarheid automatisch geladen.</p>
     <nav class="tabs" role="tablist">
@@ -216,7 +212,7 @@
   const kortLabel = (key) => P.parseKey(key).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
   const slotLabel = (id) => P.SLOTS.find((s) => s.id === id).label;
   const tijdLabel = (iso) => new Date(iso).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  const headers = (extra) => Object.assign({ 'x-groepscode': $('groepscode').value.trim() }, extra || {});
+  const headers = (extra) => Object.assign({}, extra || {});
   const naamKey = () => $('naam').value.trim().toLowerCase();
   const ik = () => spelers.find((x) => x.naam.toLowerCase() === naamKey()) || null;
   function meld(id, tekst, soort) { const m = $(id); m.textContent = tekst; m.className = 'melding' + (soort ? ' ' + soort : ''); }
@@ -607,7 +603,7 @@
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');
-      bewaar('padel-naam', naam); bewaar('padel-code', $('groepscode').value.trim());
+      bewaar('padel-naam', naam);
       meld('profiel-melding', nieuw ? 'Opgeslagen. Vul nu je beschikbaarheid per week in.' : 'Instellingen bijgewerkt.', 'ok');
       await laadSpelers();
       actieveWeek = null;
@@ -624,7 +620,6 @@
     toonAlles();
   }
   $('naam').addEventListener('change', naamGewijzigd);
-  $('groepscode').addEventListener('change', async () => { bewaar('padel-code', $('groepscode').value.trim()); await laadClubs(); await laadSpelers(); naamGewijzigd(); });
   $('ververs').addEventListener('click', async () => { liveCache.clear(); await laadSpelers(); toonOverzicht(); toonPlanner(); toonBanen(); });
   $('kies-dag').addEventListener('change', toonBanen);
   $('kies-slot').addEventListener('change', toonBanen);
@@ -633,7 +628,6 @@
   planDagen.forEach((d) => $('kies-dag').append(h('option', { value: d }, dagLabel(d))));
   P.SLOTS.forEach((s) => $('kies-slot').append(h('option', { value: s.id }, s.label)));
   $('kies-slot').value = 'avond2';
-  $('groepscode').value = lees('padel-code');
   $('naam').value = lees('padel-naam');
   await laadClubs();
   $('padelchecker').href = padelcheckerUrl;

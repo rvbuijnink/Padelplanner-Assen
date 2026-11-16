@@ -26,7 +26,7 @@ Deze site gebruikt een Netlify-functie met Netlify Database (Postgres) om speler
 1. Zet de map in een GitHub-repository en koppel die aan een site in Netlify.
 2. Of gebruik de Netlify CLI: `npm install`, `npx netlify login` en dan `npx netlify deploy --prod`.
 
-Optioneel: stel in Netlify onder Site configuration, Environment variables de variabele `GROUP_CODE` in. Spelers moeten die code dan invullen om antwoorden te zien of op te slaan. Zonder code kan iedereen met de link de namen en antwoorden zien.
+Iedereen met de link kan de namen en antwoorden zien en invullen. Optioneel: stel `BEHEER_CODE` in om het wijzigen van clubgegevens af te schermen.
 
 ## Bestanden
 

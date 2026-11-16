@@ -183,9 +183,6 @@ async function slaClubOp(req: Request, b: any) {
 }
 
 export default async (req: Request) => {
-  // Optionele groepscode: stel GROUP_CODE in als omgevingsvariabele in Netlify.
-  const code = Netlify.env.get("GROUP_CODE");
-  if (code && req.headers.get("x-groepscode") !== code) return fout("Groepscode klopt niet.", 401);
 
   const pad = new URL(req.url).pathname.replace(/\/+$/, "");
   try {
