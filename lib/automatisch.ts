@@ -20,8 +20,8 @@ const UUR = 3600000;
 // Hoeveel potjes er per run hooguit automatisch worden aangemaakt (voorkomt een stortvloed aan mails).
 const MAX_NIEUW_PER_RUN = 4;
 // Potjes worden minstens zoveel dagen vooruit gepland, zodat er tijd is om te bevestigen en te boeken.
+// Hoe ver vooruit: zo ver als er bij minstens één club gereserveerd kan worden (per club wordt daarna nog gekeken of die dag al boekbaar is).
 const MIN_DAGEN_VOORUIT = 2;
-const MAX_DAGEN_VOORUIT = 21;
 // Hoe vaak per run hooguit bij de clubs wordt nagevraagd of er een baan vrij is, en hoe lang er hooguit wordt gezocht.
 const MAX_BAAN_CHECKS = 12;
 const MAX_ZOEKTIJD = 18000;
@@ -355,7 +355,8 @@ async function zoekNieuwePotjes(ctx: Context, mails: Mail[]) {
   // Niet wachten tot iedereen heeft ingevuld: zodra vier passende spelers op hetzelfde moment kunnen, wordt er gepland.
   // Maar alleen als er op dat moment ook echt een baan vrij is: anders worden er geen uitnodigingen verstuurd.
   const dagen: string[] = [];
-  for (let i = MIN_DAGEN_VOORUIT; i <= MAX_DAGEN_VOORUIT; i++) dagen.push(plusDagen(ctx.vandaag, i));
+  const maxDagenVooruit = P.boekingsHorizon(ctx.clubs);
+  for (let i = MIN_DAGEN_VOORUIT; i <= maxDagenVooruit; i++) dagen.push(plusDagen(ctx.vandaag, i));
   const vandaagDatum = P.parseKey(ctx.vandaag);
   const begin = Date.now();
   let gemaakt = 0;
