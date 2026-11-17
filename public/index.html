@@ -267,6 +267,11 @@
           <p class="hint">Bij "Niet" plant de planner je nooit bij die club in.</p>
           <div class="scroll"><table class="voorkeur" id="voorkeur"></table></div>
         </fieldset>
+        <fieldset>
+          <legend>E-mail</legend>
+          <label class="optie"><input type="checkbox" id="mail-aan" checked> Stuur me uitnodigingen voor potjes per e-mail</label>
+          <p class="hint">De site plant zelf potjes als vier spelers kunnen. Je krijgt dan een mail met <em>Ik doe mee</em> of <em>Kan toch niet</em>. Zonder e-mail zie je uitnodigingen alleen hier bij <em>Planning</em>.</p>
+        </fieldset>
         <button type="submit">Instellingen opslaan</button>
         <div class="melding" id="profiel-melding" role="status"></div>
       </form>
@@ -296,19 +301,15 @@
   <div class="paneel" id="paneel-planning" hidden>
     <section>
       <h2>Geplande potjes</h2>
-      <p class="hint">Hier zie je per potje wie zich heeft opgegeven. De eerste vier spelen, wie daarna komt staat op de reservelijst. Een potje plan je bij <em>Beste momenten</em> hieronder of zelf met <em>Zelf een potje plannen</em>.</p>
+      <div class="uitleg">De site plant zelf potjes. Zodra vier spelers op hetzelfde moment kunnen (en qua niveau, speelduur en club bij elkaar passen), krijgen ze een uitnodiging per e-mail. Wie afzegt of niet op tijd reageert, wordt vervangen door de volgende speler die ook kan. Hebben alle vier bevestigd, dan krijgt iedereen een mail dat het potje doorgaat en wie de baan boekt. Weken worden ingepland zodra de invuldeadline voorbij is.</div>
+      <p class="melding" id="partijen-info" role="status"></p>
       <div id="partijen"></div>
+      <button type="button" class="rustig" id="ververs">Vernieuw</button>
       <details id="zelf-plannen">
         <summary><strong>Zelf een potje plannen</strong></summary>
+        <p class="hint">Je staat er zelf meteen bij. De site nodigt daarna per e-mail passende spelers uit tot er vier zijn.</p>
         <div id="zelf-plannen-form"></div>
       </details>
-    </section>
-
-    <section>
-      <h2>Beste momenten</h2>
-      <p class="hint" id="planner-info"></p>
-      <div id="planner"></div>
-      <button type="button" class="rustig" id="ververs">Vernieuw</button>
     </section>
 
     <section>
@@ -334,6 +335,13 @@
         <input type="password" id="beheercode" placeholder="Alleen nodig als die is ingesteld">
       </div></div>
       <div id="beheer"></div>
+    </section>
+    <section>
+      <h2>Beste momenten</h2>
+      <p class="hint">Alleen voor de beheerder. Momenten waarop vier passende spelers kunnen, met live vrije banen. De site plant deze momenten zelf in; hier kun je ook zelf een extra potje vastzetten. Vul hierboven de beheercode in en klik op <em>Toon beste momenten</em>.</p>
+      <button type="button" class="rustig" id="toon-beste">Toon beste momenten</button>
+      <p class="hint" id="planner-info"></p>
+      <div id="planner"></div>
     </section>
     <section>
       <h2>Wie heeft ingevuld?</h2>
@@ -374,7 +382,11 @@
   const dagLabel = (key) => P.parseKey(key).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
   const kortLabel = (key) => P.parseKey(key).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
   const tijdLabel = (iso) => new Date(iso).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  const headers = (extra) => Object.assign({}, extra || {});
+  const headers = (extra) => {
+    const code = document.getElementById('beheercode') && document.getElementById('beheercode').value;
+    return Object.assign(code ? { 'x-beheercode': code } : {}, extra || {});
+  };
+  let isBeheerder = false;
   // Je speler hoort bij het account waarmee je bent ingelogd.
   let gebruiker = null;
   const ik = () => spelers.find((x) => x.eigen) || null;
@@ -410,6 +422,7 @@
     document.querySelectorAll('input[name=wens]').forEach((i) => (i.checked = !!r && r.wensNiveaus.includes(i.value)));
     document.querySelectorAll('input[name=duur]').forEach((i) => (i.checked = !!r && r.duren.includes(i.value)));
     $('frequentie').value = r ? r.frequentie : 'wanneer-het-lukt';
+    $('mail-aan').checked = !r || r.mailAan !== false;
     clubs.forEach((c) => {
       const v = r ? P.voorkeurVan(r, c.id) : 'wel';
       document.querySelectorAll('input[name="club-' + c.id + '"]').forEach((i) => (i.checked = i.value === v));
@@ -609,6 +622,7 @@
       if (!r.ok) { $('planner-info').textContent = data.fout || 'Gegevens laden mislukt.'; spelers = []; return; }
       $('planner-info').textContent = '';
       spelers = data.spelers;
+      isBeheerder = !!data.beheer;
     } catch (e) {
       $('planner-info').textContent = 'De gegevens kunnen alleen geladen worden op de Netlify-site (niet als los bestand).';
       spelers = [];
@@ -643,6 +657,12 @@
     toonOverzicht();
   }
   $('toon-overzicht').addEventListener('click', laadOverzicht);
+  $('toon-beste').addEventListener('click', async () => {
+    liveCache.clear();
+    await Promise.all([laadSpelers(), laadPartijen()]);
+    if (!isBeheerder) { $('planner').replaceChildren(); $('planner-info').textContent = 'Beheercode klopt niet of is niet ingevuld.'; return; }
+    toonPartijen(); toonPlanner();
+  });
 
   // ---- Geplande potjes ----
   let partijen = [];
@@ -653,6 +673,7 @@
       const r = await fetch('/api/partijen', { headers: headers() });
       const data = await r.json();
       partijen = r.ok ? data.partijen : [];
+      if (r.ok) isBeheerder = !!data.beheer;
     } catch (e) { partijen = []; }
   }
   async function partijActie(pad, body, meldingEl) {
@@ -662,40 +683,57 @@
       if (!r.ok) throw new Error(data.fout || 'Dat lukte niet.');
       await laadPartijen();
       toonPartijen();
+      if (data.tekst) meld('partijen-info', data.tekst, 'ok');
       return true;
     } catch (err) {
       if (meldingEl) { meldingEl.textContent = err.message; meldingEl.className = 'melding fout'; }
       return false;
     }
   }
-  const naamLijst = (lijst) => lijst.map((d, i) => [i ? ', ' : '', d.ik ? h('strong', {}, d.naam + ' (jij)') : d.naam]);
+  const naamLijst = (lijst) => lijst.map((d, i) => [i ? ', ' : '', d.ik ? h('strong', {}, d.naam + ' (jij)') : d.naam,
+    d.status === 'uitgenodigd' ? h('span', { class: 'hint' }, ' (uitgenodigd)') : null]);
   function toonPartijen() {
     const box = $('partijen');
-    if (!partijen.length) { box.replaceChildren(h('p', { class: 'hint' }, 'Er zijn nog geen potjes gepland.')); return; }
-    box.replaceChildren(...partijen.map((p) => {
+    if (!partijen.length) { box.replaceChildren(h('p', { class: 'hint' }, 'Er zijn nog geen potjes gepland. Zodra vier spelers op hetzelfde moment kunnen, plant de site er een en krijgen zij een mail.')); return; }
+    // Eerst de potjes waarvoor je bent uitgenodigd, dan die waar je meedoet, dan de rest.
+    const volgorde = (p) => (p.mijnStatus === 'uitgenodigd' ? 0 : p.doeIkMee ? 1 : 2);
+    box.replaceChildren(...partijen.slice().sort((a, b) => volgorde(a) - volgorde(b)).map((p) => {
       const melding = h('div', { class: 'melding', role: 'status' });
       const knoppen = [];
       const vol = p.deelnemers.length >= 4;
-      if (p.doeIkMee) {
-        const af = h('button', { type: 'button', class: 'rustig' }, 'Afmelden');
-        af.addEventListener('click', () => partijActie('/afmelden', { id: p.id }, melding));
+      const isReserve = p.reserves.some((d) => d.ik);
+      if (p.mijnStatus === 'uitgenodigd') {
+        const ja = h('button', { type: 'button' }, 'Ik doe mee');
+        ja.addEventListener('click', () => partijActie('/aanmelden', { id: p.id }, melding));
+        const nee = h('button', { type: 'button', class: 'rustig' }, 'Kan toch niet');
+        nee.addEventListener('click', () => partijActie('/afmelden', { id: p.id }, melding));
+        knoppen.push(ja, nee);
+      } else if (p.doeIkMee) {
+        const af = h('button', { type: 'button', class: 'rustig' }, isReserve ? 'Van de reservelijst af' : 'Kan toch niet');
+        af.addEventListener('click', () => { if (isReserve || confirm('Weet je zeker dat je niet meer meedoet? De anderen krijgen bericht en er wordt een vervanger gezocht.')) partijActie('/afmelden', { id: p.id }, melding); });
         knoppen.push(af);
       } else if (ik()) {
-        const mee = h('button', { type: 'button' }, vol ? 'Zet me op de reservelijst' : 'Ik doe mee');
+        const mee = h('button', { type: 'button', class: vol ? 'rustig' : '' }, vol ? 'Zet me op de reservelijst' : 'Ik doe mee');
         mee.addEventListener('click', () => partijActie('/aanmelden', { id: p.id }, melding));
         knoppen.push(mee);
       }
-      if (p.vanMij) {
+      if (p.vanMij || isBeheerder) {
         const weg = h('button', { type: 'button', class: 'link' }, 'Potje verwijderen');
-        weg.addEventListener('click', () => { if (confirm('Dit potje verwijderen? Iedereen die zich heeft opgegeven wordt dan ook afgemeld.')) partijActie('/verwijderen', { id: p.id }, melding); });
+        weg.addEventListener('click', () => { if (confirm('Dit potje verwijderen? Iedereen die erbij staat wordt dan ook afgemeld (zonder e-mail).')) partijActie('/verwijderen', { id: p.id }, melding); });
         knoppen.push(weg);
       }
       const open = 4 - p.deelnemers.length;
+      const wacht = p.deelnemers.filter((d) => d.status === 'uitgenodigd').length;
+      const badge = p.compleet ? h('span', { class: 'badge' }, 'gaat door')
+        : vol ? h('span', { class: 'badge', style: 'border-color:var(--let);color:var(--let)' }, 'wacht op ' + wacht + (wacht === 1 ? ' antwoord' : ' antwoorden'))
+        : h('span', { class: 'badge', style: 'border-color:var(--let);color:var(--let)' }, 'nog ' + open + (open === 1 ? ' speler' : ' spelers') + ' nodig');
       return h('div', { class: 'moment' },
-        h('h3', {}, dagLabel(p.datum) + ', ' + p.tijd + '–' + eindTijd(p.tijd, p.duur) + ' · ' + clubNaam(p.clubId),
-          h('span', { class: 'badge', style: vol ? '' : 'border-color:var(--let);color:var(--let)' }, vol ? 'compleet' : 'nog ' + open + (open === 1 ? ' speler' : ' spelers') + ' nodig')),
-        h('div', {}, 'Opgegeven (' + p.deelnemers.length + '/4): ', p.deelnemers.length ? naamLijst(p.deelnemers) : h('span', { class: 'hint' }, 'nog niemand')),
+        h('h3', {}, dagLabel(p.datum) + ', ' + p.tijd + '–' + eindTijd(p.tijd, p.duur) + ' · ' + clubNaam(p.clubId), badge),
+        p.mijnStatus === 'uitgenodigd' ? h('div', { class: 'let' }, 'Je bent uitgenodigd voor dit potje. Doe je mee?') : null,
+        h('div', {}, 'Spelers (' + p.deelnemers.length + '/4): ', p.deelnemers.length ? naamLijst(p.deelnemers) : h('span', { class: 'hint' }, 'nog niemand')),
         p.reserves.length ? h('div', { class: 'hint' }, 'Reserve: ', naamLijst(p.reserves)) : null,
+        p.compleet && p.boeker ? h('div', {}, p.boekerIkke ? h('strong', {}, 'Jij boekt de baan.') : p.boeker + ' boekt de baan.') : null,
+        p.compleet && p.boekerIkke ? h('div', { class: 'boekrij' }, (() => { const c = clubs.find((x) => x.id === p.clubId); return c ? h('a', { class: 'knop', href: c.boeken, target: '_blank', rel: 'noopener' }, 'Boek bij ' + c.naam + ' ↗') : null; })()) : null,
         p.opmerking ? h('div', { class: 'hint' }, p.opmerking) : null,
         h('div', { class: 'boekrij' }, knoppen), melding);
     }));
@@ -726,7 +764,7 @@
       knop.disabled = true;
       const ok = await partijActie('', { datum: o.datum || dagSel.value, tijd: tijdSel.value, duur: duurSel.value, clubId: clubSel.value }, melding);
       knop.disabled = false;
-      if (ok) { melding.textContent = 'Gepland en je staat erbij. Je ziet het potje bovenaan bij "Geplande potjes"; de anderen kunnen zich nu opgeven.'; melding.className = 'melding ok'; }
+      if (ok) { melding.textContent = 'Gepland en je staat erbij. Passende spelers krijgen nu een uitnodiging per e-mail. Je ziet het potje bij "Geplande potjes" op het tabblad Planning.'; melding.className = 'melding ok'; }
     });
     const veld = (label, el) => h('div', {}, h('label', {}, h('strong', {}, label), el));
     return h('div', { class: 'planform' },
@@ -807,6 +845,7 @@
     const run = ++plannerRun;
     const box = $('planner');
     box.replaceChildren();
+    if (!isBeheerder) { $('planner-info').textContent = ''; return; }
     if (!spelers.length) { if (!$('planner-info').textContent) $('planner-info').textContent = 'Nog geen spelers.'; return; }
     $('planner-info').textContent = spelers.length + ' speler(s) doen mee. De planner kijkt naar ' + kortLabel(planDagen[0]) + ' t/m ' + kortLabel(planDagen[planDagen.length - 1]) + '.';
     const kandidaten = P.plan(spelers, clubs, today, 8, planDagen);
@@ -1063,7 +1102,7 @@
     try {
       const r = await fetch('/api/profiel', {
         method: 'PUT', headers: headers({ 'content-type': 'application/json' }),
-        body: JSON.stringify({ naam, niveau, wensNiveaus, duren, frequentie: $('frequentie').value, clubVoorkeur })
+        body: JSON.stringify({ naam, niveau, wensNiveaus, duren, frequentie: $('frequentie').value, clubVoorkeur, mailAan: $('mail-aan').checked })
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');
@@ -1077,6 +1116,8 @@
 
   // ---- Gebeurtenissen ----
   $('ververs').addEventListener('click', async () => { liveCache.clear(); await Promise.all([laadSpelers(), laadPartijen()]); toonPartijen(); toonPlanner(); toonBanen(); });
+  // Terugkomen via de knop in een uitnodiging: meteen naar Planning.
+  if (/[?&]tab=planning/.test(location.search)) bewaar('padel-tab', 'planning');
   $('kies-dag').addEventListener('change', toonBanen);
   // Van/tot: de eindtijd ligt altijd minstens een uur na de begintijd.
   function pasTotAan() {
