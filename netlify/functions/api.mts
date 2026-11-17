@@ -9,14 +9,15 @@
 // GET /api/partijen          -> komende geplande partijen: je eigen partijen, of alle partijen voor de beheerder (ingelogd)
 // POST /api/partijen         -> nieuwe partij plannen; je geeft je daarmee zelf op (ingelogd)
 // POST /api/partijen/aanmelden | /afmelden | /verwijderen | /geboekt | /nietgeboekt  { id } (ingelogd)
-// POST /api/partijen/betaallink { id, link }  -> wie boekt deelt een Tikkie; de anderen krijgen die per mail
+// POST /api/partijen/geboekt { id, link? } -> baan geboekt; de anderen krijgen een mail (met Tikkie als die er is)
+// POST /api/partijen/betaallink { id, link }  -> wie boekt deelt (later) een Tikkie; de anderen krijgen die per mail
 // POST /api/partijen/betaald | /nietbetaald { id, spelerId } -> bijhouden wie zijn deel heeft betaald
 // GET  /api/antwoord?t=...   -> gegevens van een uitnodiging uit de e-mail (geen inlog nodig, de sleutel is genoeg)
 // POST /api/antwoord         { t, a: "ja" | "nee" } -> uitnodiging beantwoorden
 import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { getUser, verifyRequestOrigin, AuthError } from "@netlify/identity";
 import { db } from "../../db/index.js";
-import { beantwoord, werkPartijBij, deelBetaallink, zoekUitnodiging, spelendVan, isActief } from "../../lib/automatisch.js";
+import { beantwoord, werkPartijBij, meldGeboekt, zoekUitnodiging, spelendVan, isActief } from "../../lib/automatisch.js";
 import { spelers, beschikbaarheid, clubGegevens, partijen, partijDeelnemers } from "../../db/schema.js";
 
 // Met welk niveau je wilt spelen: één range van-tot, opgeslagen als ["8.0-9.2"].
@@ -237,21 +238,31 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
   if (actie === "aanmelden" || actie === "afmelden") {
     const r = await beantwoord(id, mij.id, actie === "aanmelden");
     return r.ok ? json({ ok: true, tekst: r.tekst }) : fout(r.fout, r.status);
-  } else if (actie === "geboekt" || actie === "nietgeboekt") {
+  } else if (actie === "geboekt" || actie === "nietgeboekt" || actie === "betaallink") {
     if (p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de beheerder) kan dit aanpassen.", 403);
-    await db.update(partijen).set({ geboekt: actie === "geboekt" }).where(eq(partijen.id, id));
-  } else if (actie === "betaallink") {
-    if (p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de beheerder) kan een betaallink delen.", 403);
-    const link = typeof b.link === "string" ? b.link.trim() : "";
+    if (actie === "nietgeboekt") {
+      await db.update(partijen).set({ geboekt: false }).where(eq(partijen.id, id));
+      return json({ ok: true });
+    }
+    // Tikkie (of andere betaallink) is optioneel bij "geboekt".
+    const heeftLink = typeof b.link === "string";
+    const link = heeftLink ? b.link.trim() : "";
     if (link) {
       let url: URL | null = null;
       try { url = new URL(link); } catch {}
-      if (!url || url.protocol !== "https:" || link.length > 500) return fout("Plak een geldige betaallink (die begint met https://).");
+      if (!url || url.protocol !== "https:" || link.length > 500) return fout("Plak een geldige betaallink (die begint met https://), of laat het veld leeg.");
     }
-    const nieuw = link && link !== p.betaallink;
-    await db.update(partijen).set({ betaallink: link || null }).where(eq(partijen.id, id));
-    if (nieuw) await deelBetaallink(id);
-    return json({ ok: true, tekst: !link ? "De betaallink is weggehaald." : nieuw ? "De betaallink is gedeeld. De andere spelers krijgen hem per mail." : "De betaallink stond er al." });
+    const nieuweLink = !!link && link !== p.betaallink;
+    const set: { geboekt?: boolean; betaallink?: string | null } = {};
+    if (heeftLink && (link || actie === "betaallink")) set.betaallink = link || null;
+    if (actie === "geboekt") set.geboekt = true;
+    if (Object.keys(set).length) await db.update(partijen).set(set).where(eq(partijen.id, id));
+    if (actie === "geboekt" && !p.geboekt) {
+      await meldGeboekt(id, "geboekt");
+      return json({ ok: true, tekst: link ? "De baan staat op geboekt. De andere spelers krijgen een mail met je Tikkie." : "De baan staat op geboekt. De andere spelers krijgen daar een mail over." });
+    }
+    if (nieuweLink) await meldGeboekt(id, "betaallink");
+    return json({ ok: true, tekst: actie === "geboekt" ? "De baan stond al op geboekt." : !link ? "De betaallink is weggehaald." : nieuweLink ? "De betaallink is gedeeld. De andere spelers krijgen hem per mail." : "De betaallink stond er al." });
   } else if (actie === "betaald" || actie === "nietbetaald") {
     const spelerId = Number(b.spelerId);
     if (!Number.isInteger(spelerId)) return fout("Onbekende speler.");
