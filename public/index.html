@@ -254,7 +254,7 @@
       <button type="button" role="tab" data-tab="instellingen" aria-selected="true">Vaste instellingen</button>
       <button type="button" role="tab" data-tab="beschikbaarheid" aria-selected="false">Beschikbaarheid per week</button>
       <button type="button" role="tab" data-tab="planning" aria-selected="false">Planning</button>
-      <button type="button" role="tab" data-tab="beheer" aria-selected="false">Beheer clubs</button>
+      <button type="button" role="tab" data-tab="beheer" aria-selected="false">Beheer</button>
     </nav>
   </section>
 
@@ -368,24 +368,24 @@
   <!-- ===== Beheer ===== -->
   <div class="paneel" id="paneel-beheer" hidden>
     <section>
-      <h2>Beheer clubs</h2>
-      <p class="hint">Vul hier de echte prijzen en de boekingshorizon per club in. Kijk daarvoor in de boekingsomgeving van de club hoe ver vooruit de kalender loopt en wanneer nieuwe dagen opengaan. Lege prijsvelden betekenen "onbekend".</p>
+      <h2>Beheercode</h2>
+      <p class="hint">Vul hier de beheercode in om <em>Beste momenten</em>, <em>Wie heeft ingevuld?</em> en bij <em>Planning</em> alle potjes te zien. De code wordt onthouden tot je dit tabblad of de browser sluit.</p>
       <div class="rij"><div>
         <label for="beheercode"><strong>Beheercode</strong></label>
-        <input type="password" id="beheercode" placeholder="Alleen nodig als die is ingesteld">
+        <input type="password" id="beheercode" autocomplete="current-password">
       </div></div>
-      <div id="beheer"></div>
+      <div class="melding" id="beheercode-melding" role="status"></div>
     </section>
     <section>
       <h2>Beste momenten</h2>
-      <p class="hint">Alleen voor de beheerder. Momenten waarop vier passende spelers kunnen, met live vrije banen. De site plant deze momenten zelf in; hier kun je ook zelf een extra potje vastzetten. Vul hierboven de beheercode in en klik op <em>Toon beste momenten</em>.</p>
+      <p class="hint">Alleen voor de beheerder. Momenten waarop vier passende spelers kunnen, met live vrije banen. De site plant deze momenten zelf in; hier kun je ook zelf een extra potje vastzetten. Vul bovenaan dit tabblad de beheercode in en klik op <em>Toon beste momenten</em>.</p>
       <button type="button" class="rustig" id="toon-beste">Toon beste momenten</button>
       <p class="hint" id="planner-info"></p>
       <div id="planner"></div>
     </section>
     <section>
       <h2>Wie heeft ingevuld?</h2>
-      <p class="hint">Dit overzicht ziet alleen de beheerder. Vul hierboven de beheercode in en klik op <em>Toon overzicht</em>. Spelers zien zelf alleen hun eigen status bij <em>Beschikbaarheid per week</em>.</p>
+      <p class="hint">Dit overzicht ziet alleen de beheerder. Vul bovenaan dit tabblad de beheercode in en klik op <em>Toon overzicht</em>. Spelers zien zelf alleen hun eigen status bij <em>Beschikbaarheid per week</em>.</p>
       <button type="button" class="rustig" id="toon-overzicht">Toon overzicht</button>
       <div class="melding" id="overzicht-melding" role="status"></div>
       <div class="scroll"><table class="overzicht" id="overzicht"></table></div>
@@ -437,6 +437,7 @@
     return Object.assign(code ? { 'x-beheercode': code } : {}, extra || {});
   };
   let isBeheerder = false;
+  try { const bewaard = sessionStorage.getItem('beheercode'); if (bewaard) document.getElementById('beheercode').value = bewaard; } catch (e) {}
   // Je speler hoort bij het account waarmee je bent ingelogd.
   let gebruiker = null;
   const ik = () => spelers.find((x) => x.eigen) || null;
@@ -995,52 +996,6 @@
       })));
   }
 
-  // ---- Beheer clubs ----
-  function toonBeheer() {
-    const veld = (club, key, label, waarde, extra) => h('div', {},
-      h('label', { for: 'b-' + club.id + '-' + key }, label),
-      h('input', Object.assign({ type: 'text', id: 'b-' + club.id + '-' + key, value: waarde == null ? '' : String(waarde).replace('.', ',') }, extra || {})));
-    $('beheer').replaceChildren(...basisClubs.map((basis) => {
-      const c = clubs.find((x) => x.id === basis.id);
-      const melding = h('div', { class: 'melding', role: 'status' });
-      const prijsUit = c.prijsBron === 'demo' ? null : c.prijs60;
-      const knop = h('button', { type: 'button' }, 'Opslaan');
-      const kaart = h('div', { class: 'clubkaart' },
-        h('h3', {}, c.naam, ' ', h('a', { class: 'knop rustig', href: c.boeken, target: '_blank', rel: 'noopener' }, 'Boekingspagina ↗')),
-        h('p', { class: 'hint' }, 'Boekingssysteem: ' + (c.systeem || 'onbekend') + (c.bijgewerkt ? ' · laatst bijgewerkt ' + tijdLabel(c.bijgewerkt) : ' · nog niet ingevuld, er staan standaardwaarden')),
-        h('div', { class: 'rij' },
-          veld(c, 'prijs60', 'Prijs per baan, 1 uur (€)', prijsUit, { inputmode: 'decimal' }),
-          veld(c, 'prijs90', 'Prijs per baan, 1,5 uur (€)', c.prijs90, { inputmode: 'decimal' })),
-        h('div', { class: 'rij' },
-          veld(c, 'dalPrijs60', 'Daltarief 1 uur (€, ma–vr tot 17:00)', c.dalPrijs60, { inputmode: 'decimal' }),
-          veld(c, 'dalPrijs90', 'Daltarief 1,5 uur (€)', c.dalPrijs90, { inputmode: 'decimal' })),
-        h('div', { class: 'rij' },
-          veld(c, 'horizonDagen', 'Hoeveel dagen vooruit boekbaar', c.horizonDagen, { inputmode: 'numeric' }),
-          veld(c, 'opentOm', 'Nieuwe dag opent om (UU:MM)', c.opentOm, { placeholder: 'bijv. 00:00' })),
-        h('label', { class: 'optie' }, h('input', { type: 'checkbox', id: 'b-' + c.id + '-bevestigd', checked: !!c.horizonBevestigd }), 'Horizon gecontroleerd bij de club'),
-        h('div', {}, veld(c, 'opmerking', 'Opmerking (zichtbaar bij de planning)', c.opmerking, { maxlength: '300', placeholder: 'bijv. reserveren via de app, lidmaatschap nodig' })),
-        h('div', { class: 'knoppen' }, knop), melding);
-      knop.addEventListener('click', async () => {
-        const v = (k) => $('b-' + c.id + '-' + k).value.trim();
-        try {
-          const r = await fetch('/api/clubs', {
-            method: 'PUT', headers: headers({ 'content-type': 'application/json', 'x-beheercode': $('beheercode').value }),
-            body: JSON.stringify({ clubId: c.id, prijs60: v('prijs60'), prijs90: v('prijs90'), dalPrijs60: v('dalPrijs60'), dalPrijs90: v('dalPrijs90'),
-              horizonDagen: v('horizonDagen'), opentOm: v('opentOm'), opmerking: v('opmerking'), horizonBevestigd: $('b-' + c.id + '-bevestigd').checked })
-          });
-          const data = await r.json();
-          if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');
-          await laadClubs();
-          zetPeriode();
-          toonWeken(); toonRaster(); toonPlanner(); toonBanen(); toonBeheer();
-          const m = document.querySelector('#beheer .clubkaart:nth-child(' + (basisClubs.indexOf(basis) + 1) + ') .melding');
-          if (m) { m.textContent = 'Opgeslagen.'; m.className = 'melding ok'; }
-        } catch (err) { melding.textContent = err.message; melding.className = 'melding fout'; }
-      });
-      return kaart;
-    }));
-  }
-
   function toonWie() {
     const r = ik();
     const uit = h('button', { type: 'button', class: 'rustig' }, 'Uitloggen');
@@ -1154,7 +1109,7 @@
     $('nieuw-wachtwoord-uitleg').textContent = uitleg;
   }
 
-  function toonAlles() { toonWie(); toonWeken(); toonRaster(); toonPartijen(); toonZelfPlannen(); toonPlanner(); toonBanen(); toonBeheer(); }
+  function toonAlles() { toonWie(); toonWeken(); toonRaster(); toonPartijen(); toonZelfPlannen(); toonPlanner(); toonBanen(); }
 
   // ---- Vaste instellingen opslaan ----
   $('profiel').addEventListener('submit', async (e) => {
@@ -1187,7 +1142,14 @@
 
   // ---- Gebeurtenissen ----
   // Met de juiste beheercode zie je bij Planning alle potjes in plaats van alleen je eigen.
-  $('beheercode').addEventListener('change', async () => { await laadPartijen(); toonPartijen(); });
+  $('beheercode').addEventListener('change', async () => {
+    const code = $('beheercode').value.trim();
+    try { code ? sessionStorage.setItem('beheercode', code) : sessionStorage.removeItem('beheercode'); } catch (e) {}
+    await laadPartijen(); toonPartijen();
+    const m = $('beheercode-melding');
+    m.textContent = !code ? '' : isBeheerder ? 'Beheercode klopt.' : 'Beheercode klopt niet.';
+    m.className = 'melding' + (code ? (isBeheerder ? ' ok' : ' fout') : '');
+  });
   $('ververs').addEventListener('click', async () => { liveCache.clear(); await Promise.all([laadSpelers(), laadPartijen()]); toonPartijen(); toonPlanner(); toonBanen(); });
   // Terugkomen via de knop in een uitnodiging: meteen naar Planning.
   if (/[?&]tab=planning/.test(location.search)) bewaar('padel-tab', 'planning');
