@@ -102,7 +102,7 @@ function kanOp(s: Speler, datum: string, tijd: string, duur: number) {
   const tijden = P.tijdenVan(P.beschikbaarVan(s)[datum] || []);
   return P.vrijVanaf(tijden, naarMin(tijd)) >= duur;
 }
-const nivPast = (a: Speler, b: Speler) => a.wensNiveaus.includes(P.rangeVan(b.niveau)) && b.wensNiveaus.includes(P.rangeVan(a.niveau));
+const nivPast = (a: Speler, b: Speler) => P.wilMet(a.wensNiveaus, b.niveau) && P.wilMet(b.wensNiveaus, a.niveau);
 const overlapt = (a: Partij, datum: string, tijd: string, duur: number) =>
   a.datum === datum && naarMin(a.tijd) < naarMin(tijd) + duur && naarMin(tijd) < naarMin(a.tijd) + a.duur;
 

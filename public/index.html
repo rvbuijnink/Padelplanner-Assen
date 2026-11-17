@@ -71,6 +71,9 @@
   .niveau-baan input[type=range] { width:100%; margin:0; accent-color:var(--accent); cursor:pointer; }
   .niveau-schuif output { min-width:3.2em; text-align:center; font-weight:700; font-size:1.2em; padding:4px 10px; border:1px solid var(--accent); border-radius:99px; background:var(--accent-zacht); }
   .niveau-schaal { display:flex; justify-content:space-between; font-size:.8em; color:var(--zacht); }
+  .niveau-schuif .schuif { margin-bottom:2px; }
+  .niveau-schuif .wens-schaal { margin:0 9px; }
+  .niveau-schuif output.breed { min-width:6.5em; white-space:nowrap; }
   label.optie:has(input:checked) { border-color:var(--accent); background:var(--accent-zacht); }
   input[type=text], input[type=email], input[type=password], input[type=number], select {
     font:inherit; padding:10px 12px; border:1px solid var(--lijn); border-radius:10px; background:var(--veld); color:inherit; width:100%; max-width:320px;
@@ -264,7 +267,18 @@
         </fieldset>
         <fieldset id="wens-veld">
           <legend>Met welk niveau wil je spelen?</legend>
-          <p class="hint">Je mag meerdere ranges aanvinken.</p>
+          <p class="hint">Schuif de bolletjes naar het laagste en hoogste niveau van je medespelers.</p>
+          <div class="niveau-schuif">
+            <div class="niveau-baan">
+              <div class="schuif" id="wens-schuif">
+                <div class="spoor"></div>
+                <input type="range" id="wens-van" min="70" max="100" step="1" value="75" aria-label="Met welk niveau wil je spelen, vanaf">
+                <input type="range" id="wens-tot" min="70" max="100" step="1" value="90" aria-label="Met welk niveau wil je spelen, tot en met">
+              </div>
+              <div class="niveau-schaal wens-schaal" aria-hidden="true"><span>7,0</span><span>8,0</span><span>9,0</span><span>10,0</span></div>
+            </div>
+            <output id="wens-waarde" class="breed" for="wens-van wens-tot">7,5 – 9,0</output>
+          </div>
         </fieldset>
         <fieldset id="duur-veld">
           <legend>Hoe lang wil je spelen?</legend>
@@ -418,7 +432,22 @@
   }
   const toonNiveau = () => ($('niveau-waarde').textContent = Number($('niveau').value).toFixed(1).replace('.', ','));
   $('niveau').addEventListener('input', toonNiveau);
-  P.NIVEAUS.forEach((n) => $('wens-veld').append(optie('checkbox', 'wens', n.id, n.label)));
+  // Range "met welk niveau wil je spelen": waarden in tienden (70 = 7,0 ... 100 = 10,0).
+  const tiende = (t) => (t / 10).toFixed(1).replace('.', ',');
+  $('wens-schuif').style.setProperty('--n', 30);
+  function toonWens(e) {
+    const van = $('wens-van'), tot = $('wens-tot');
+    if (+van.value > +tot.value) { if (e && e.target === van) tot.value = van.value; else van.value = tot.value; }
+    const a = +van.value, b = +tot.value;
+    van.style.zIndex = a >= 100 ? 2 : ''; // anders zit het 'tot'-bolletje erbovenop en kun je 'vanaf' niet terugschuiven
+    $('wens-schuif').style.setProperty('--van', a - 70);
+    $('wens-schuif').style.setProperty('--tot', b - 70);
+    van.setAttribute('aria-valuetext', tiende(a));
+    tot.setAttribute('aria-valuetext', tiende(b));
+    $('wens-waarde').textContent = a === b ? tiende(a) : tiende(a) + ' – ' + tiende(b);
+  }
+  $('wens-van').addEventListener('input', toonWens);
+  $('wens-tot').addEventListener('input', toonWens);
   P.DUREN.forEach((d) => $('duur-veld').append(optie('checkbox', 'duur', d.id, d.label)));
   P.FREQUENTIES.forEach((f) => $('frequentie').append(h('option', { value: f.id }, f.label)));
 
@@ -434,7 +463,13 @@
     const g = r ? P.niveauGetal(r.niveau) : NaN;
     $('niveau').value = Number.isFinite(g) ? g.toFixed(1) : '8.0';
     toonNiveau();
-    document.querySelectorAll('input[name=wens]').forEach((i) => (i.checked = !!r && r.wensNiveaus.includes(i.value)));
+    const w = r && P.wensBereik(r.wensNiveaus);
+    if (w) { $('wens-van').value = Math.round(w[0] * 10); $('wens-tot').value = Math.round(w[1] * 10); }
+    else {
+      const t = Math.round((Number.isFinite(g) ? g : 8) * 10);
+      $('wens-van').value = Math.max(70, t - 5); $('wens-tot').value = Math.min(100, t + 5);
+    }
+    toonWens();
     document.querySelectorAll('input[name=duur]').forEach((i) => (i.checked = !!r && r.duren.includes(i.value)));
     $('frequentie').value = r ? r.frequentie : 'wanneer-het-lukt';
     $('mail-aan').checked = !r || r.mailAan !== false;
@@ -1104,13 +1139,12 @@
     e.preventDefault();
     const naam = $('naam').value.trim();
     const niveau = Number($('niveau').value).toFixed(1);
-    const wensNiveaus = [...document.querySelectorAll('input[name=wens]:checked')].map((i) => i.value);
+    const wensNiveaus = [(+$('wens-van').value / 10).toFixed(1) + '-' + (+$('wens-tot').value / 10).toFixed(1)];
     const duren = [...document.querySelectorAll('input[name=duur]:checked')].map((i) => i.value);
     const clubVoorkeur = {};
     clubs.forEach((c) => { clubVoorkeur[c.id] = (document.querySelector('input[name="club-' + c.id + '"]:checked') || {}).value || 'wel'; });
     if (!naam) { meld('profiel-melding', 'Vul je naam in.', 'fout'); $('naam').focus(); return; }
     if (!niveau) { meld('profiel-melding', 'Kies je speelsterkte.', 'fout'); return; }
-    if (!wensNiveaus.length) { meld('profiel-melding', 'Kies met welk niveau je wilt spelen.', 'fout'); return; }
     if (!duren.length) { meld('profiel-melding', 'Kies minstens één speelduur (1 uur en/of 1,5 uur).', 'fout'); return; }
     if (Object.values(clubVoorkeur).every((v) => v === 'niet')) { meld('profiel-melding', 'Kies minstens één club waar je wel wilt spelen.', 'fout'); return; }
     const nieuw = !ik();

@@ -17,7 +17,16 @@ import { db } from "../../db/index.js";
 import { beantwoord, werkPartijBij, zoekUitnodiging, spelendVan, isActief } from "../../lib/automatisch.js";
 import { spelers, beschikbaarheid, clubGegevens, partijen, partijDeelnemers } from "../../db/schema.js";
 
-const NIVEAUS = ["n70", "n75", "n80", "n85", "n90", "n95"];
+// Met welk niveau je wilt spelen: één range van-tot, opgeslagen als ["8.0-9.2"].
+function leesWens(x: unknown): string[] | null {
+  let van: unknown, tot: unknown;
+  if (Array.isArray(x) && x.length === 1 && typeof x[0] === "string") [van, tot] = x[0].split("-");
+  else if (x && typeof x === "object" && !Array.isArray(x)) ({ van, tot } = x as any);
+  else return null;
+  const a = leesNiveau(van), b = leesNiveau(tot);
+  if (!a || !b || Number(a) > Number(b)) return null;
+  return [a + "-" + b];
+}
 // Speelsterkte: 7.0 t/m 10.0 in stapjes van 0.1, opgeslagen als tekst met één decimaal (bv. "8.2").
 function leesNiveau(x: unknown): string | null {
   const g = typeof x === "number" ? x : typeof x === "string" ? Number(x.replace(",", ".")) : NaN;
@@ -236,8 +245,8 @@ async function slaProfielOp(user: Gebruiker, b: any) {
   if (!key) return fout("Ongeldige naam.");
   const niveau = leesNiveau(b.niveau);
   if (!niveau) return fout("Kies je speelsterkte (7,0 t/m 10,0).");
-  if (!Array.isArray(b.wensNiveaus) || !b.wensNiveaus.length || !b.wensNiveaus.every((x: string) => NIVEAUS.includes(x)))
-    return fout("Kies minstens één niveau waarmee je wilt spelen.");
+  const wensNiveaus = leesWens(b.wensNiveaus);
+  if (!wensNiveaus) return fout("Kies met welk niveau je wilt spelen (een range tussen 7,0 en 10,0).");
   if (!Array.isArray(b.duren) || !b.duren.length || !b.duren.every((x: string) => DUREN.includes(x)))
     return fout("Kies minstens één speelduur.");
   if (!FREQ.includes(b.frequentie)) return fout("Kies hoe vaak je wilt spelen.");
@@ -253,7 +262,7 @@ async function slaProfielOp(user: Gebruiker, b: any) {
   const waarden = {
     naam,
     niveau,
-    wensNiveaus: [...new Set<string>(b.wensNiveaus)],
+    wensNiveaus,
     duren: [...new Set<string>(b.duren)],
     frequentie: b.frequentie,
     clubVoorkeur,
