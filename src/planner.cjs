@@ -85,8 +85,12 @@
   ];
   const VOORKEUREN = [
     { id: 'wel', label: 'Wel' },
+    // Alleen bij buitenbanen: in herfst en winter telt de club als 'niet'.
+    { id: 'zomer', label: 'Alleen lente en zomer', alleenBuiten: true },
     { id: 'niet', label: 'Niet' }
   ];
+  // Lente en zomer: 21 maart t/m 22 september.
+  const LENTE_ZOMER = ['03-21', '09-22'];
 
   const pad = (n) => String(n).padStart(2, '0');
   const dagKey = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
@@ -178,8 +182,18 @@
     }
     return out;
   }
-  // Alles behalve 'niet' telt als 'wel' (ook oudere waarden zoals 'graag' of 'prima').
-  const voorkeurVan = (speler, clubId) => (speler.clubVoorkeur && speler.clubVoorkeur[clubId] === 'niet' ? 'niet' : 'wel');
+  const isLenteZomer = (datumKey) => {
+    const md = String(datumKey).slice(5, 10);
+    return md >= LENTE_ZOMER[0] && md <= LENTE_ZOMER[1];
+  };
+  // Alles behalve 'niet' en 'zomer' telt als 'wel' (ook oudere waarden zoals 'graag' of 'prima').
+  // Met een datum wordt 'zomer' buiten lente en zomer 'niet'; zonder datum blijft het 'zomer'.
+  function voorkeurVan(speler, clubId, datumKey) {
+    const v = speler.clubVoorkeur && speler.clubVoorkeur[clubId];
+    if (v === 'niet') return 'niet';
+    if (v === 'zomer') return datumKey && !isLenteZomer(datumKey) ? 'niet' : 'zomer';
+    return 'wel';
+  }
 
   // Twee spelers passen bij elkaar als ze elkaars niveau accepteren
   // en minstens één speelduur gemeenschappelijk hebben.
@@ -187,12 +201,12 @@
     return a.duren.filter((d) => b.duren.includes(d));
   }
   // Twee spelers moeten ook minstens één club delen waar ze allebei willen spelen.
-  function gedeeldeClub(groep, clubs) {
-    return clubs.some((c) => groep.every((p) => voorkeurVan(p, c.id) !== 'niet'));
+  function gedeeldeClub(groep, clubs, datumKey) {
+    return clubs.some((c) => groep.every((p) => voorkeurVan(p, c.id, datumKey) !== 'niet'));
   }
-  function compatibel(a, b, clubs) {
+  function compatibel(a, b, clubs, datumKey) {
     return (
-      (!clubs || gedeeldeClub([a, b], clubs)) &&
+      (!clubs || gedeeldeClub([a, b], clubs, datumKey)) &&
       wilMet(a.wensNiveaus, b.niveau) &&
       wilMet(b.wensNiveaus, a.niveau) &&
       gemeenschappelijkeDuren(a, b).length > 0
@@ -201,20 +215,20 @@
 
   // Alle groepjes van 4 waarin iedereen bij iedereen past
   // en alle vier minstens één speelduur gemeen hebben.
-  function groepenVanVier(spelers, clubs) {
+  function groepenVanVier(spelers, clubs, datumKey) {
     const res = [];
     const n = spelers.length;
     for (let i = 0; i < n; i++)
       for (let j = i + 1; j < n; j++) {
-        if (!compatibel(spelers[i], spelers[j], clubs)) continue;
+        if (!compatibel(spelers[i], spelers[j], clubs, datumKey)) continue;
         for (let k = j + 1; k < n; k++) {
-          if (!compatibel(spelers[i], spelers[k], clubs) || !compatibel(spelers[j], spelers[k], clubs)) continue;
+          if (!compatibel(spelers[i], spelers[k], clubs, datumKey) || !compatibel(spelers[j], spelers[k], clubs, datumKey)) continue;
           for (let l = k + 1; l < n; l++) {
             const g = [spelers[i], spelers[j], spelers[k], spelers[l]];
-            if (!compatibel(g[0], g[3], clubs) || !compatibel(g[1], g[3], clubs) || !compatibel(g[2], g[3], clubs)) continue;
+            if (!compatibel(g[0], g[3], clubs, datumKey) || !compatibel(g[1], g[3], clubs, datumKey) || !compatibel(g[2], g[3], clubs, datumKey)) continue;
             const duren = g[0].duren.filter((d) => g.every((p) => p.duren.includes(d)));
             if (duren.length === 0) continue;
-            if (clubs && !gedeeldeClub(g, clubs)) continue;
+            if (clubs && !gedeeldeClub(g, clubs, datumKey)) continue;
             res.push({ spelers: g, duren });
           }
         }
@@ -273,9 +287,9 @@
     });
   }
 
-  // Of de hele groep bij deze club wil spelen.
-  function clubOk(groep, club) {
-    return groep.every((p) => voorkeurVan(p, club.id) !== 'niet');
+  // Of de hele groep bij deze club wil spelen (op die datum, als die is meegegeven).
+  function clubOk(groep, club, datumKey) {
+    return groep.every((p) => voorkeurVan(p, club.id, datumKey) !== 'niet');
   }
 
   // spelers: [{ naam, niveau, wensNiveaus, duren, clubVoorkeur, weken }]
@@ -298,7 +312,7 @@
           if (duren.length) beschikbaar.push(Object.assign({}, r, { duren, rest }));
         }
         if (beschikbaar.length < 4) { vorige = null; continue; }
-        const groepen = groepenVanVier(beschikbaar, clubs);
+        const groepen = groepenVanVier(beschikbaar, clubs, d);
         if (!groepen.length) { vorige = null; continue; }
         const namen = new Set();
         groepen.forEach((g) => g.spelers.forEach((p) => namen.add(p.naam)));
@@ -306,14 +320,14 @@
         // Zelfde spelers als een half uur eerder: dat moment is al gevonden.
         if (vorige && vorige.sleutel === sleutel && t < vorige.tot) continue;
         // Kies het groepje met de meeste gemeenschappelijke speelduren en de meeste clubs waar iedereen wil spelen
-        const aantalClubs = (g) => clubs.filter((c) => clubOk(g.spelers, c)).length;
+        const aantalClubs = (g) => clubs.filter((c) => clubOk(g.spelers, c, d)).length;
         const beste = groepen.slice().sort((a, b) => b.duren.length - a.duren.length || aantalClubs(b) - aantalClubs(a))[0];
         const tot = t + Math.min(...beste.spelers.map((p) => p.rest));
         vorige = { sleutel, tot };
         const id = tijdId(t, tot);
         const slot = { id, van: naarTijd(t), tot: naarTijd(tot), label: tijdLabel(id) };
         const opties = clubs
-          .filter((c) => clubOk(beste.spelers, c))
+          .filter((c) => clubOk(beste.spelers, c, d))
           .map((c) => ({ club: c, status: status(c, d, id, today) }))
           .filter((o) => o.status.soort === 'boekbaar' || o.status.soort === 'nog-niet')
           .map((o) => Object.assign(o, { prijs: prijs(o.club, beste.duren[0], d, id) }))
@@ -357,7 +371,7 @@
     NIVEAUS, NIVEAU_MIN, NIVEAU_MAX, NIVEAU_STAP, niveauGetal, rangeVan, geldigNiveau, niveauLabel, wensBereik, geldigeWens, wilMet, wensLabel, DUREN, SLOTS, OUDE_SLOTS, DAG_VAN, DAG_TOT, STAP, VENSTER_DAGEN,
     naarMin, naarTijd, leesTijd, tijdId, tijdLabel, tijdenVan, normaliseer, vrijVanaf, WEKEN_ZICHTBAAR, HORIZON_STANDAARD, HORIZON_MAX, VOORKEUREN, FREQUENTIES,
     dagKey, parseKey, dagenTussen, volgendeDagen,
-    maandagVan, weken, dagenVanWeek, boekingsHorizon, wekenBinnenHorizon, weekStatus, beschikbaarVan, voorkeurVan, clubOk,
+    maandagVan, weken, dagenVanWeek, boekingsHorizon, wekenBinnenHorizon, weekStatus, beschikbaarVan, voorkeurVan, isLenteZomer, clubOk,
     compatibel, groepenVanVier, status, prijs, isDal, voegClubsSamen, plan
   };
 });
