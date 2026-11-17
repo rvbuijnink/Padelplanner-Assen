@@ -1,5 +1,5 @@
 // Automatisch plannen met e-mail.
-// - De site zoekt zelf momenten waarop vier passende spelers kunnen en maakt daar een potje van.
+// - De site zoekt zelf momenten waarop vier passende spelers kunnen én er live een baan vrij is, en maakt daar een potje van.
 // - Die spelers krijgen een uitnodiging per e-mail met "Ik doe mee" / "Kan toch niet".
 // - Wie afzegt of niet op tijd reageert, wordt vervangen door de volgende speler die ook kan.
 // - Hebben vier spelers bevestigd, dan krijgt iedereen een mail dat het potje doorgaat en wie de baan boekt.
@@ -22,6 +22,9 @@ const MAX_NIEUW_PER_RUN = 4;
 // Potjes worden minstens zoveel dagen vooruit gepland, zodat er tijd is om te bevestigen en te boeken.
 const MIN_DAGEN_VOORUIT = 2;
 const MAX_DAGEN_VOORUIT = 21;
+// Hoe vaak per run hooguit bij de clubs wordt nagevraagd of er een baan vrij is, en hoe lang er hooguit wordt gezocht.
+const MAX_BAAN_CHECKS = 12;
+const MAX_ZOEKTIJD = 18000;
 
 const env = (k: string): string | undefined => (globalThis as any).Netlify?.env?.get(k) ?? process.env[k];
 export const siteUrl = () => (env("URL") || "https://planpadel.netlify.app").replace(/\/+$/, "");
@@ -160,6 +163,7 @@ function uitnodiging(ctx: Context, p: Partij, s: Speler, token: string): Mail | 
     tekst:
       `Hoi ${s.naam},\n\n` +
       "Volgens je beschikbaarheid kun je op dit moment, dus er is een potje voor je gepland.\n\n" +
+      (p.automatisch ? `Bij het plannen was er bij ${clubVan(ctx, p.clubId).naam} nog een baan vrij. Die wordt geboekt zodra alle vier spelers hebben bevestigd.\n\n` : "") +
       `Wanneer: ${potjeTekst(ctx, p)}\n` +
       `Met: ${anderen.length ? naamLijst(anderen) : "nog onbekend"}\n\n` +
       `Laat het weten vóór ${tot}. Reageer je niet op tijd, dan vragen we iemand anders.`,
@@ -349,52 +353,62 @@ async function liveKeuze(datum: string, slot: any, duur: number, opties: any[]) 
 
 async function zoekNieuwePotjes(ctx: Context, mails: Mail[]) {
   // Niet wachten tot iedereen heeft ingevuld: zodra vier passende spelers op hetzelfde moment kunnen, wordt er gepland.
+  // Maar alleen als er op dat moment ook echt een baan vrij is: anders worden er geen uitnodigingen verstuurd.
   const dagen: string[] = [];
   for (let i = MIN_DAGEN_VOORUIT; i <= MAX_DAGEN_VOORUIT; i++) dagen.push(plusDagen(ctx.vandaag, i));
   const vandaagDatum = P.parseKey(ctx.vandaag);
+  const begin = Date.now();
   let gemaakt = 0;
+  let checks = 0;
   const geprobeerd = new Set<string>();
   const perWeek = new Map<string, string[]>();
   for (const d of dagen) perWeek.set(maandag(d), [...(perWeek.get(maandag(d)) ?? []), d]);
+  // Binnen de tijdslimiet van de functie blijven: niet eindeloos clubs blijven bevragen.
+  const genoegGezocht = () => checks >= MAX_BAAN_CHECKS || Date.now() - begin > MAX_ZOEKTIJD;
   for (const weekDagen of perWeek.values()) {
-  while (gemaakt < MAX_NIEUW_PER_RUN) {
-    // Alleen spelers die deze week nog willen spelen (volgens "hoe vaak").
-    const pool = ctx.spelers.filter((s) => heeftRuimte(ctx, s, weekDagen[0]));
-    if (pool.length < MAX_SPELERS) break;
-    const kandidaten = P.plan(pool, ctx.clubs, vandaagDatum, 30, weekDagen);
-    let gekozen: { k: any; groep: Speler[]; duur: number } | null = null;
-    for (const k of kandidaten) {
-      const sleutel = k.datum + k.slot.id + k.voorbeeldGroep.join("|");
-      if (geprobeerd.has(sleutel)) continue;
-      geprobeerd.add(sleutel);
-      const groep = k.voorbeeldGroep.map((n: string) => pool.find((s) => s.naam === n)).filter(Boolean) as Speler[];
-      if (groep.length !== MAX_SPELERS || !k.opties.length) continue;
-      const duur = Math.max(...k.duren.map(Number));
-      const club = (k.opties.find((o: any) => o.status.soort === "boekbaar") || k.opties[0]).club.id;
-      const voorstel = { datum: k.datum, tijd: k.slot.van, duur, clubId: club };
-      if (groep.every((s, i) => pastBij(ctx, s, voorstel, groep.filter((_, j) => j !== i)))) {
-        gekozen = { k, groep, duur };
-        break;
+    while (gemaakt < MAX_NIEUW_PER_RUN && !genoegGezocht()) {
+      // Alleen spelers die deze week nog willen spelen (volgens "hoe vaak").
+      const pool = ctx.spelers.filter((s) => heeftRuimte(ctx, s, weekDagen[0]));
+      if (pool.length < MAX_SPELERS) break;
+      const kandidaten = P.plan(pool, ctx.clubs, vandaagDatum, 30, weekDagen);
+      let gekozen: { k: any; groep: Speler[]; duur: number; clubId: string; tijd: string } | null = null;
+      for (const k of kandidaten) {
+        if (genoegGezocht()) break;
+        const sleutel = k.datum + k.slot.id + k.voorbeeldGroep.join("|");
+        if (geprobeerd.has(sleutel)) continue;
+        geprobeerd.add(sleutel);
+        const groep = k.voorbeeldGroep.map((n: string) => pool.find((s) => s.naam === n)).filter(Boolean) as Speler[];
+        // Alleen clubs waar je op die dag al kunt boeken.
+        const opties = k.opties.filter((o: any) => o.status.soort === "boekbaar");
+        if (groep.length !== MAX_SPELERS || !opties.length) continue;
+        const duur = Math.max(...k.duren.map(Number));
+        // Eerst kijken of de spelers in principe passen, pas daarna de clubs bevragen.
+        const voorlopig = { datum: k.datum, tijd: k.slot.van, duur, clubId: opties[0].club.id };
+        if (!groep.every((s, i) => pastBij(ctx, s, voorlopig, groep.filter((_, j) => j !== i)))) continue;
+        checks++;
+        const live = await liveKeuze(k.datum, k.slot, duur, opties);
+        if (!live) continue; // geen vrije baan (of de club was niet bereikbaar): niemand uitnodigen
+        const voorstel = { datum: k.datum, tijd: live.tijd, duur, clubId: live.clubId };
+        if (groep.every((s, i) => pastBij(ctx, s, voorstel, groep.filter((_, j) => j !== i)))) {
+          gekozen = { k, groep, duur, clubId: live.clubId, tijd: live.tijd };
+          break;
+        }
       }
+      if (!gekozen) break;
+      const { k, groep, duur, clubId, tijd } = gekozen;
+      const [nieuw] = await db
+        .insert(partijen)
+        .values({ datum: k.datum, tijd, duur, clubId, automatisch: true, opmerking: "Automatisch gepland" })
+        .returning();
+      const p: Partij = { ...nieuw, rijen: [] };
+      ctx.partijen.push(p);
+      for (const s of groep) await nodigUit(ctx, p, s, mails);
+      for (const s of groep) {
+        const m = uitnodiging(ctx, p, s, p.rijen.find((r) => r.spelerId === s.id)!.token!);
+        if (m) mails.push(m);
+      }
+      gemaakt++;
     }
-    if (!gekozen) break;
-    const { k, groep, duur } = gekozen;
-    const live = await liveKeuze(k.datum, k.slot, duur, k.opties);
-    const clubId = live?.clubId ?? (k.opties.find((o: any) => o.status.soort === "boekbaar") || k.opties[0]).club.id;
-    const tijd = live?.tijd ?? k.slot.van;
-    const [nieuw] = await db
-      .insert(partijen)
-      .values({ datum: k.datum, tijd, duur, clubId, automatisch: true, opmerking: "Automatisch gepland" })
-      .returning();
-    const p: Partij = { ...nieuw, rijen: [] };
-    ctx.partijen.push(p);
-    for (const s of groep) await nodigUit(ctx, p, s, mails);
-    for (const s of groep) {
-      const m = uitnodiging(ctx, p, s, p.rijen.find((r) => r.spelerId === s.id)!.token!);
-      if (m) mails.push(m);
-    }
-    gemaakt++;
-  }
   }
   return gemaakt;
 }
