@@ -183,7 +183,7 @@ function gaatDoor(ctx: Context, p: Partij, vier: Speler[], boeker: Speler): Mail
       `Hoi ${s.naam},\n\nAlle vier spelers hebben bevestigd. De partij gaat door!\n\n` +
       `Wanneer: ${partijTekst(ctx, p)}\nSpelers: ${naamLijst(vier.map((x) => x.naam))}\n\n` +
       (s.id === boeker.id
-        ? `Jij boekt de baan. Doe dat zo snel mogelijk via de knop hieronder.${kosten} Is er geen baan meer vrij? Laat het de anderen weten.\n\nGeboekt? Zet dat bij de partij op de site en plak daar je Tikkie (of andere betaallink). De anderen krijgen die dan vanzelf per mail; je hebt hun nummers niet nodig.`
+        ? `Jij boekt de baan. Doe dat zo snel mogelijk via de knop hieronder.${kosten} Is er geen baan meer vrij? Laat het de anderen weten.\n\nGeboekt? Druk bij de partij op de site op "Baan is geboekt" en plak daar eventueel je Tikkie (of andere betaallink). De anderen krijgen dan een mail dat de baan geboekt is, met de Tikkie erin; je hebt hun nummers niet nodig. Ook zonder Tikkie krijgen ze die mail.`
         : `${boeker.naam} boekt de baan.${kosten}`) +
       `\n\nKun je toch niet? Meld je dan af op de site, dan zoeken we een vervanger.`,
     knoppen: s.id === boeker.id ? [{ label: `Boek bij ${club.naam}`, url: club.boeken }, { label: "Naar de Padelplanner", url: `${siteUrl()}/?tab=planning` }] : [{ label: "Naar de Padelplanner", url: `${siteUrl()}/?tab=planning` }],
@@ -244,30 +244,40 @@ async function werkBij(ctx: Context, p: Partij, mails: Mail[]) {
   }
 }
 
-// ---- Betaallink (Tikkie) delen ----
-// Wie boekt plakt een betaallink; de andere spelers die nog niet hebben betaald krijgen die per mail.
-export async function deelBetaallink(partijId: number) {
+// ---- Baan geboekt / betaallink (Tikkie) delen ----
+// Zodra wie boekt de baan op "geboekt" zet, krijgen de andere spelers een mail dat de baan geboekt is,
+// met de Tikkie erin als die meteen is geplakt (en ook zonder Tikkie gaat de mail).
+// Plakt die later alsnog (of een nieuwe) betaallink, dan krijgen wie nog niet betaald hebben die per mail.
+export async function meldGeboekt(partijId: number, soort: "geboekt" | "betaallink" = "geboekt") {
   const ctx = await laad();
   const p = ctx.partijen.find((x) => x.id === partijId);
-  if (!p || !p.betaallink) return;
+  if (!p || (soort === "betaallink" && !p.betaallink)) return;
   const club = clubVan(ctx, p.clubId);
   const boeker = spelerVan(ctx, p.boekerId);
   const pr = P.prijs(club, p.duur, p.datum, P.tijdId(naarMin(p.tijd), naarMin(p.tijd) + p.duur));
   const bedrag = pr ? ` Je deel is ongeveer € ${pr.perPersoon.toFixed(2).replace(".", ",")}.` : "";
-  const wie = boeker?.naam ?? "Wie de baan boekte";
+  const wie = boeker?.naam ?? "Wie de baan boekt";
+  const planner = { label: "Naar de Padelplanner", url: `${siteUrl()}/?tab=planning` };
   const mails: Mail[] = [];
   for (const r of spelendVan(p).slice(0, MAX_SPELERS)) {
-    if (r.spelerId === p.boekerId || r.betaald || r.status !== "bevestigd") continue;
+    if (r.spelerId === p.boekerId || r.status !== "bevestigd") continue;
+    if (soort === "betaallink" && r.betaald) continue;
     const s = spelerVan(ctx, r.spelerId);
     if (!kanMail(s)) continue;
+    const metLink = !!p.betaallink && !r.betaald;
     mails.push({
       aan: s.email!,
       naam: s.naam,
-      onderwerp: `Betaal je deel van de baan voor ${dagTekst(p.datum)}`,
+      onderwerp: soort === "geboekt"
+        ? `De baan is geboekt: padel op ${dagTekst(p.datum)}`
+        : `Betaal je deel van de baan voor ${dagTekst(p.datum)}`,
       tekst:
-        `Hoi ${s.naam},\n\n${wie} heeft de baan geboekt voor de partij van ${partijTekst(ctx, p)}.${bedrag}\n\n` +
-        `Betaal je deel via de knop hieronder. Op de site kun je daarna aangeven dat je hebt betaald.`,
-      knoppen: [{ label: "Betaal je deel", url: p.betaallink }, { label: "Naar de Padelplanner", url: `${siteUrl()}/?tab=planning` }],
+        `Hoi ${s.naam},\n\n${wie} heeft de baan geboekt voor de partij van ${partijTekst(ctx, p)}.` +
+        (soort === "geboekt" ? " De partij is rond, tot dan!" : "") +
+        (metLink
+          ? `${bedrag}\n\nBetaal je deel via de Tikkie hieronder. Op de site kun je daarna aangeven dat je hebt betaald.`
+          : `${bedrag}\n\nEr is (nog) geen Tikkie bij de partij gezet. Spreek met ${wie} af hoe je je deel betaalt.`),
+      knoppen: metLink ? [{ label: "Betaal je deel (Tikkie)", url: p.betaallink! }, planner] : [planner],
     });
   }
   await verstuur(mails);

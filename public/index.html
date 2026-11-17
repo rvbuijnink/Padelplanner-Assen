@@ -130,7 +130,9 @@
   .sp-wacht { color:var(--fout); font-weight:600; font-size:.88rem; }
   .sp-open { color:var(--zacht); font-style:italic; }
   .kleuruitleg { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:.86rem; color:var(--zacht); margin:0 0 12px; }
-  .kleuruitleg span::before { content:''; display:inline-block; width:.8em; height:.8em; border-radius:3px; margin-right:6px; vertical-align:-1px; background:var(--k); }
+  .uitleg .stappen { margin:0 0 8px; padding-left:1.3em; }
+  .uitleg .stappen li { margin:0 0 6px; }
+  .uitleg p { margin:0; }
 
   table.banen { width:100%; border-collapse:collapse; font-size:.92rem; }
   table.banen th, table.banen td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--lijn); vertical-align:top; }
@@ -356,8 +358,17 @@
   <div class="paneel" id="paneel-planning" hidden>
     <section>
       <h2>Geplande partijen</h2>
-      <div class="uitleg">De site plant zelf partijen. Zodra vier spelers op hetzelfde moment kunnen (en qua niveau, speelduur en club bij elkaar passen) <strong>en er op dat moment ook live een baan vrij is</strong>, krijgen ze een uitnodiging per e-mail. Is er geen baan vrij, dan wordt er niemand uitgenodigd. Wie afzegt of niet op tijd reageert, wordt vervangen door de volgende speler die ook kan. Hebben alle vier bevestigd, dan krijgt iedereen een mail dat de partij doorgaat en wie de baan boekt. Heeft die de baan geboekt, dan zet die dat hier bij de partij, zodat iedereen ziet dat het rond is. Daarna plakt die een Tikkie bij de partij; de andere spelers krijgen die per mail en zien hier wie al heeft betaald. De site wacht niet tot iedereen zijn beschikbaarheid heeft ingevuld: zodra er vier spelers kunnen, wordt er gepland. Je ziet hier alleen de partijen waar je zelf bij hoort; de beheerder ziet alle partijen.</div>
-      <div class="kleuruitleg" aria-label="Kleuren"><span style="--k:color-mix(in srgb, var(--fout) 55%, var(--card))">Nog niet gepland: wacht op spelers</span><span style="--k:#f0a35e">Gepland: baan moet nog geboekt worden</span><span style="--k:color-mix(in srgb, var(--goed) 60%, var(--card))">Baan geboekt</span></div>
+      <div class="uitleg">
+        <ol class="stappen">
+          <li><strong>De site zoekt een match.</strong> De site plant een partij zodra aan al deze voorwaarden is voldaan: vier spelers kunnen op hetzelfde moment, hun niveau past bij elkaar, hun speelduur past bij elkaar, hun clubvoorkeur komt overeen en er is op die club een baan vrij. Is er geen baan vrij, dan wordt niemand uitgenodigd.</li>
+          <li><strong>Uitnodiging per e-mail.</strong> Zodra er een partij is gepland, krijgen de vier spelers een uitnodiging per e-mail.</li>
+          <li><strong>Bevestigen.</strong> Elke speler bevestigt of zegt af. Je hebt maximaal 24 uur om te reageren; is de partij eerder, dan de helft van de tijd tot de partij (minstens 2 uur). De uiterste tijd staat in de mail. Reageer je niet op tijd of zeg je af, dan komt de volgende speler die ook kan in jouw plaats.</li>
+          <li><strong>Alle vier deelnemers hebben bevestigd.</strong> Iedereen krijgt een mail dat de partij doorgaat, met de naam van degene die de baan boekt.</li>
+          <li><strong>De baan boeken.</strong> Die speler boekt de baan en plakt een Tikkie bij de partij. De anderen krijgen een mail dat de baan geboekt is, met de Tikkie in de mail. Wil de boeker geen Tikkie op de site zetten, dan gaat de mail toch.</li>
+        </ol>
+        <p>Je ziet hier alleen de partijen waar je zelf bij hoort; de beheerder ziet alle partijen.</p>
+      </div>
+      <div class="kleuruitleg" aria-label="Kleuren"><span style="--k:color-mix(in srgb, var(--fout) 55%, var(--card))">🔴 Rood: vier spelers kunnen, maar moeten nog bevestigen</span><span style="--k:#f0a35e">🟠 Oranje: gepland, baan moet nog geboekt worden</span><span style="--k:color-mix(in srgb, var(--goed) 60%, var(--card))">🟢 Groen: baan geboekt</span></div>
       <p class="melding" id="partijen-info" role="status"></p>
       <div id="partijen"></div>
       <button type="button" class="rustig" id="ververs">Vernieuw</button>
@@ -837,10 +848,21 @@
       const club = clubs.find((x) => x.id === p.clubId);
       let boekInfo = null;
       if (stand === 'gepland' && p.boeker) {
-        const vink = (p.boekerIkke || isBeheerder) ? h('button', { type: 'button' }, 'Baan is geboekt') : null;
-        if (vink) vink.addEventListener('click', () => partijActie('/geboekt', { id: p.id }, melding));
+        const magBoeken = p.boekerIkke || isBeheerder;
+        const vink = magBoeken ? h('button', { type: 'button' }, 'Baan is geboekt') : null;
+        let tikkieVak = null;
+        if (magBoeken) {
+          // Tikkie is optioneel: ook zonder Tikkie krijgen de anderen een mail dat de baan geboekt is.
+          const prG = club ? P.prijs(club, p.duur, p.datum, P.tijdId(P.naarMin(p.tijd), P.naarMin(p.tijd) + p.duur)) : null;
+          const tikkie = h('input', { type: 'text', inputmode: 'url', placeholder: 'https://tikkie.me/pay/… (mag leeg)', 'aria-label': 'Tikkie of andere betaallink (optioneel)' });
+          tikkie.value = p.betaallink || '';
+          vink.addEventListener('click', () => partijActie('/geboekt', { id: p.id, link: tikkie.value }, melding));
+          tikkieVak = h('div', { class: 'betaalvak' },
+            h('div', {}, 'Geboekt? Plak eventueel je Tikkie' + (prG ? ' (' + euro(prG.perPersoon) + ' p.p.)' : '') + ' en druk op ', h('em', {}, 'Baan is geboekt'), '. De anderen krijgen een mail dat de baan geboekt is, met de Tikkie erin. Geen Tikkie? Laat het veld leeg; de mail gaat dan toch.'),
+            h('div', { class: 'boekrij' }, tikkie, vink));
+        }
         boekInfo = h('div', {}, h('div', {}, p.boekerIkke ? h('strong', {}, 'Jij moet de baan boeken.') : h('span', {}, h('strong', {}, p.boeker), ' moet de baan boeken.')),
-          h('div', { class: 'boekrij' }, p.boekerIkke && club ? h('a', { class: 'knop', href: club.boeken, target: '_blank', rel: 'noopener' }, 'Boek bij ' + club.naam + ' ↗') : null, vink));
+          p.boekerIkke && club ? h('div', { class: 'boekrij' }, h('a', { class: 'knop', href: club.boeken, target: '_blank', rel: 'noopener' }, 'Boek bij ' + club.naam + ' ↗')) : null, tikkieVak);
       } else if (stand === 'geboekt') {
         const terug = (p.boekerIkke || isBeheerder) ? h('button', { type: 'button', class: 'link' }, 'Toch nog niet geboekt') : null;
         if (terug) terug.addEventListener('click', () => partijActie('/nietgeboekt', { id: p.id }, melding));
@@ -853,13 +875,13 @@
           const deelKnop = h('button', { type: 'button' }, p.betaallink ? 'Link wijzigen' : 'Deel Tikkie met de anderen');
           deelKnop.addEventListener('click', () => partijActie('/betaallink', { id: p.id, link: veld.value }, melding));
           betaal = h('div', { class: 'betaalvak' },
-            h('div', {}, p.betaallink ? 'Je Tikkie is gedeeld met de andere spelers.' : 'Maak in je bank-app of de Tikkie-app een Tikkie' + deel + ', kopieer de link en plak hem hier. De anderen krijgen hem per mail; je hebt hun nummers niet nodig.'),
+            h('div', {}, p.betaallink ? 'Je Tikkie is gedeeld met de andere spelers.' : 'Nog geen Tikkie gedeeld. Wil je dat alsnog doen? Maak in je bank-app of de Tikkie-app een Tikkie' + deel + ', kopieer de link en plak hem hier. De anderen krijgen hem per mail; je hebt hun nummers niet nodig.'),
             h('div', { class: 'boekrij' }, veld, deelKnop));
         } else if (p.betaallink) {
           const mijn = p.deelnemers.find((d) => d.ik);
           betaal = mijn && !mijn.betaald ? h('div', { class: 'boekrij' }, h('a', { class: 'knop', href: p.betaallink, target: '_blank', rel: 'noopener' }, 'Betaal je deel via Tikkie' + deel + ' ↗')) : null;
         } else if (p.doeIkMee) {
-          betaal = h('div', { class: 'hint' }, (p.boeker || 'Wie boekte') + ' stuurt nog een Tikkie; die krijg je per mail.');
+          betaal = h('div', { class: 'hint' }, 'Er is (nog) geen Tikkie gedeeld. Spreek met ' + (p.boeker || 'wie boekte') + ' af hoe je je deel betaalt; komt er alsnog een Tikkie, dan krijg je die per mail.');
         }
         boekInfo = h('div', {}, h('div', {}, p.boeker ? (p.boekerIkke ? 'Jij hebt de baan geboekt.' : p.boeker + ' heeft de baan geboekt.') : 'De baan is geboekt.', terug ? ' ' : null, terug), betaal);
       } else if (p.geboekt) {
