@@ -67,6 +67,8 @@ export const partijen = pgTable("partijen", {
   compleetGemeld: boolean("compleet_gemeld").notNull().default(false),
   // Of de baan echt geboekt is (aangevinkt door wie boekt of door de beheerder).
   geboekt: boolean().notNull().default(false),
+  // Betaallink (bijv. een Tikkie) die wie boekt deelt met de andere spelers.
+  betaallink: text(),
   aangemaakt: timestamp("aangemaakt", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -83,6 +85,8 @@ export const partijDeelnemers = pgTable(
     token: text().unique(),
     uitgenodigd: timestamp("uitgenodigd", { withTimezone: true }),
     herinnerd: boolean().notNull().default(false),
+    // Of deze speler zijn deel van de baan heeft betaald aan wie boekte.
+    betaald: boolean().notNull().default(false),
   },
   (t) => [primaryKey({ columns: [t.partijId, t.spelerId] })]
 );

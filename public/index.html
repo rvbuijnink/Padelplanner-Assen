@@ -165,6 +165,8 @@
   a.knop { display:inline-block; font-size:.9rem; font-weight:600; padding:7px 14px; border-radius:10px; border:1px solid var(--accent); background:var(--accent); color:#fff; text-decoration:none; transition:background .15s; }
   a.knop.rustig { background:transparent; color:var(--accent); }
   a.knop.rustig:hover { background:var(--accent-zacht); }
+  .betaalvak { margin-top:6px; }
+  .betaalvak input[type=text] { flex:1 1 220px; max-width:none; }
   .boekrij { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:6px; }
   .clubkaart { border:1px solid var(--lijn); border-radius:12px; padding:16px; margin-bottom:12px; background:var(--veld); }
   .clubkaart h3 { margin:0 0 10px; font-size:1.05rem; }
@@ -354,7 +356,7 @@
   <div class="paneel" id="paneel-planning" hidden>
     <section>
       <h2>Geplande partijen</h2>
-      <div class="uitleg">De site plant zelf partijen. Zodra vier spelers op hetzelfde moment kunnen (en qua niveau, speelduur en club bij elkaar passen) <strong>en er op dat moment ook live een baan vrij is</strong>, krijgen ze een uitnodiging per e-mail. Is er geen baan vrij, dan wordt er niemand uitgenodigd. Wie afzegt of niet op tijd reageert, wordt vervangen door de volgende speler die ook kan. Hebben alle vier bevestigd, dan krijgt iedereen een mail dat de partij doorgaat en wie de baan boekt. Heeft die de baan geboekt, dan zet die dat hier bij de partij, zodat iedereen ziet dat het rond is. De site wacht niet tot iedereen zijn beschikbaarheid heeft ingevuld: zodra er vier spelers kunnen, wordt er gepland. Je ziet hier alleen de partijen waar je zelf bij hoort; de beheerder ziet alle partijen.</div>
+      <div class="uitleg">De site plant zelf partijen. Zodra vier spelers op hetzelfde moment kunnen (en qua niveau, speelduur en club bij elkaar passen) <strong>en er op dat moment ook live een baan vrij is</strong>, krijgen ze een uitnodiging per e-mail. Is er geen baan vrij, dan wordt er niemand uitgenodigd. Wie afzegt of niet op tijd reageert, wordt vervangen door de volgende speler die ook kan. Hebben alle vier bevestigd, dan krijgt iedereen een mail dat de partij doorgaat en wie de baan boekt. Heeft die de baan geboekt, dan zet die dat hier bij de partij, zodat iedereen ziet dat het rond is. Daarna plakt die een Tikkie bij de partij; de andere spelers krijgen die per mail en zien hier wie al heeft betaald. De site wacht niet tot iedereen zijn beschikbaarheid heeft ingevuld: zodra er vier spelers kunnen, wordt er gepland. Je ziet hier alleen de partijen waar je zelf bij hoort; de beheerder ziet alle partijen.</div>
       <div class="kleuruitleg" aria-label="Kleuren"><span style="--k:color-mix(in srgb, var(--fout) 55%, var(--card))">Nog niet gepland: wacht op spelers</span><span style="--k:#f0a35e">Gepland: baan moet nog geboekt worden</span><span style="--k:color-mix(in srgb, var(--goed) 60%, var(--card))">Baan geboekt</span></div>
       <p class="melding" id="partijen-info" role="status"></p>
       <div id="partijen"></div>
@@ -820,7 +822,16 @@
         : h('span', { class: 'badge rood' }, 'nog niet gepland · ' + (open > 0 ? 'nog ' + open + (open === 1 ? ' speler' : ' spelers') + ' nodig' : 'wacht op ' + wacht + (wacht === 1 ? ' bevestiging' : ' bevestigingen')));
       const spelerRij = (d) => h('li', {}, d.ik ? h('strong', {}, d.naam + ' (jij)') : h('span', {}, d.naam),
         d.status === 'bevestigd' ? h('span', { class: 'sp-ok' }, '✓ bevestigd') : h('span', { class: 'sp-wacht' }, '… nog niet bevestigd'),
-        p.compleet && d.boekt ? h('span', { class: 'hint' }, '· boekt de baan') : null);
+        p.compleet && d.boekt ? h('span', { class: 'hint' }, '· boekt de baan') : null,
+        betaalStand(d));
+      // Betalen: na het boeken deelt wie boekte een Tikkie; per speler zie je of die al heeft betaald.
+      function betaalStand(d) {
+        if (stand !== 'geboekt' || !p.betaallink || d.boekt) return null;
+        const magWijzigen = d.ik || p.boekerIkke || isBeheerder;
+        const knop = magWijzigen ? h('button', { type: 'button', class: 'link' }, d.betaald ? 'toch niet' : (d.ik ? 'Ik heb betaald' : 'markeer als betaald')) : null;
+        if (knop) knop.addEventListener('click', () => partijActie(d.betaald ? '/nietbetaald' : '/betaald', { id: p.id, spelerId: d.id }, melding));
+        return h('span', {}, d.betaald ? h('span', { class: 'sp-ok' }, '· betaald') : h('span', { class: 'sp-wacht' }, '· nog niet betaald'), knop ? ' ' : null, knop);
+      }
       const spelers4 = h('ul', { class: 'spelerlijst' }, ...p.deelnemers.map(spelerRij),
         ...Array.from({ length: Math.max(0, open) }, () => h('li', { class: 'sp-open' }, 'nog een speler nodig')));
       const club = clubs.find((x) => x.id === p.clubId);
@@ -833,7 +844,24 @@
       } else if (stand === 'geboekt') {
         const terug = (p.boekerIkke || isBeheerder) ? h('button', { type: 'button', class: 'link' }, 'Toch nog niet geboekt') : null;
         if (terug) terug.addEventListener('click', () => partijActie('/nietgeboekt', { id: p.id }, melding));
-        boekInfo = h('div', {}, p.boeker ? (p.boekerIkke ? 'Jij hebt de baan geboekt.' : p.boeker + ' heeft de baan geboekt.') : 'De baan is geboekt.', terug ? ' ' : null, terug);
+        const pr = club ? P.prijs(club, p.duur, p.datum, P.tijdId(P.naarMin(p.tijd), P.naarMin(p.tijd) + p.duur)) : null;
+        const deel = pr ? ' (' + euro(pr.perPersoon) + ' p.p.)' : '';
+        let betaal = null;
+        if (p.boekerIkke || isBeheerder) {
+          const veld = h('input', { type: 'text', inputmode: 'url', placeholder: 'https://tikkie.me/pay/…', 'aria-label': 'Tikkie of andere betaallink' });
+          veld.value = p.betaallink || '';
+          const deelKnop = h('button', { type: 'button' }, p.betaallink ? 'Link wijzigen' : 'Deel Tikkie met de anderen');
+          deelKnop.addEventListener('click', () => partijActie('/betaallink', { id: p.id, link: veld.value }, melding));
+          betaal = h('div', { class: 'betaalvak' },
+            h('div', {}, p.betaallink ? 'Je Tikkie is gedeeld met de andere spelers.' : 'Maak in je bank-app of de Tikkie-app een Tikkie' + deel + ', kopieer de link en plak hem hier. De anderen krijgen hem per mail; je hebt hun nummers niet nodig.'),
+            h('div', { class: 'boekrij' }, veld, deelKnop));
+        } else if (p.betaallink) {
+          const mijn = p.deelnemers.find((d) => d.ik);
+          betaal = mijn && !mijn.betaald ? h('div', { class: 'boekrij' }, h('a', { class: 'knop', href: p.betaallink, target: '_blank', rel: 'noopener' }, 'Betaal je deel via Tikkie' + deel + ' ↗')) : null;
+        } else if (p.doeIkMee) {
+          betaal = h('div', { class: 'hint' }, (p.boeker || 'Wie boekte') + ' stuurt nog een Tikkie; die krijg je per mail.');
+        }
+        boekInfo = h('div', {}, h('div', {}, p.boeker ? (p.boekerIkke ? 'Jij hebt de baan geboekt.' : p.boeker + ' heeft de baan geboekt.') : 'De baan is geboekt.', terug ? ' ' : null, terug), betaal);
       } else if (p.geboekt) {
         boekInfo = h('div', { class: 'hint' }, 'De baan is al geboekt; er wordt nog een speler gezocht.');
       }

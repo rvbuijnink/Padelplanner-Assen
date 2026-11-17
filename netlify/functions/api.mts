@@ -9,12 +9,14 @@
 // GET /api/partijen          -> komende geplande partijen: je eigen partijen, of alle partijen voor de beheerder (ingelogd)
 // POST /api/partijen         -> nieuwe partij plannen; je geeft je daarmee zelf op (ingelogd)
 // POST /api/partijen/aanmelden | /afmelden | /verwijderen | /geboekt | /nietgeboekt  { id } (ingelogd)
+// POST /api/partijen/betaallink { id, link }  -> wie boekt deelt een Tikkie; de anderen krijgen die per mail
+// POST /api/partijen/betaald | /nietbetaald { id, spelerId } -> bijhouden wie zijn deel heeft betaald
 // GET  /api/antwoord?t=...   -> gegevens van een uitnodiging uit de e-mail (geen inlog nodig, de sleutel is genoeg)
 // POST /api/antwoord         { t, a: "ja" | "nee" } -> uitnodiging beantwoorden
 import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { getUser, verifyRequestOrigin, AuthError } from "@netlify/identity";
 import { db } from "../../db/index.js";
-import { beantwoord, werkPartijBij, zoekUitnodiging, spelendVan, isActief } from "../../lib/automatisch.js";
+import { beantwoord, werkPartijBij, deelBetaallink, zoekUitnodiging, spelendVan, isActief } from "../../lib/automatisch.js";
 import { spelers, beschikbaarheid, clubGegevens, partijen, partijDeelnemers } from "../../db/schema.js";
 
 // Met welk niveau je wilt spelen: één range van-tot, opgeslagen als ["8.0-9.2"].
@@ -176,7 +178,7 @@ async function allePartijen(user: Gebruiker, beheer: boolean) {
   return lijst.map((p) => {
     const actief = spelendVan({ ...p, rijen: rijen.filter((r) => r.partijId === p.id) });
     const mijnRij = rijen.find((r) => r.partijId === p.id && r.spelerId === mij?.id);
-    const toon = (r: (typeof rijen)[number]) => ({ naam: namen.get(r.spelerId) ?? "?", ik: r.spelerId === mij?.id, status: r.status, boekt: !!p.boekerId && r.spelerId === p.boekerId });
+    const toon = (r: (typeof rijen)[number]) => ({ naam: namen.get(r.spelerId) ?? "?", ik: r.spelerId === mij?.id, status: r.status, boekt: !!p.boekerId && r.spelerId === p.boekerId, id: r.spelerId, betaald: r.betaald });
     const vier = actief.slice(0, MAX_SPELERS);
     return {
       id: p.id,
@@ -194,6 +196,7 @@ async function allePartijen(user: Gebruiker, beheer: boolean) {
       boeker: p.boekerId ? namen.get(p.boekerId) ?? null : null,
       boekerIkke: !!mij && p.boekerId === mij.id,
       geboekt: p.geboekt,
+      betaallink: p.betaallink,
       deelnemers: vier.map(toon),
       reserves: actief.slice(MAX_SPELERS).map(toon),
     };
@@ -237,6 +240,28 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
   } else if (actie === "geboekt" || actie === "nietgeboekt") {
     if (p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de beheerder) kan dit aanpassen.", 403);
     await db.update(partijen).set({ geboekt: actie === "geboekt" }).where(eq(partijen.id, id));
+  } else if (actie === "betaallink") {
+    if (p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de beheerder) kan een betaallink delen.", 403);
+    const link = typeof b.link === "string" ? b.link.trim() : "";
+    if (link) {
+      let url: URL | null = null;
+      try { url = new URL(link); } catch {}
+      if (!url || url.protocol !== "https:" || link.length > 500) return fout("Plak een geldige betaallink (die begint met https://).");
+    }
+    const nieuw = link && link !== p.betaallink;
+    await db.update(partijen).set({ betaallink: link || null }).where(eq(partijen.id, id));
+    if (nieuw) await deelBetaallink(id);
+    return json({ ok: true, tekst: !link ? "De betaallink is weggehaald." : nieuw ? "De betaallink is gedeeld. De andere spelers krijgen hem per mail." : "De betaallink stond er al." });
+  } else if (actie === "betaald" || actie === "nietbetaald") {
+    const spelerId = Number(b.spelerId);
+    if (!Number.isInteger(spelerId)) return fout("Onbekende speler.");
+    if (spelerId !== mij.id && p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de speler zelf) kan dit aanpassen.", 403);
+    const r = await db
+      .update(partijDeelnemers)
+      .set({ betaald: actie === "betaald" })
+      .where(and(eq(partijDeelnemers.partijId, id), eq(partijDeelnemers.spelerId, spelerId)))
+      .returning({ id: partijDeelnemers.spelerId });
+    if (!r.length) return fout("Deze speler hoort niet bij deze partij.", 404);
   } else if (actie === "verwijderen") {
     if (p.aangemaaktDoor !== mij.id && !beheer) return fout("Alleen wie de partij heeft gepland (of de beheerder) kan deze verwijderen.", 403);
     await db.delete(partijen).where(eq(partijen.id, id));
@@ -420,7 +445,7 @@ export default async (req: Request) => {
     if (pad === "/api/beschikbaarheid" && schrijven) return await slaBeschikbaarheidOp(user, await leesBody(req));
     if (pad === "/api/partijen" && req.method === "GET") return (async () => { const beheer = isBeheer(req); return json({ partijen: await allePartijen(user, beheer), beheer }); })();
     if (pad === "/api/partijen" && req.method === "POST") return await maakPartij(user, await leesBody(req));
-    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt)$/.exec(pad);
+    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|betaald|nietbetaald)$/.exec(pad);
     if (m && req.method === "POST") return await wijzigPartij(user, m[1], await leesBody(req), isBeheer(req));
     return fout("Niet gevonden.", 404);
   } catch (e) {
