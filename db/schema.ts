@@ -14,6 +14,9 @@ export const spelers = pgTable("spelers", {
   frequentie: text().notNull(),
   // clubId -> "graag" | "prima" | "niet"
   clubVoorkeur: jsonb("club_voorkeur").$type<Record<string, string>>().notNull().default({}),
+  // E-mailadres van het account (overgenomen bij inloggen) en of de speler e-mails wil krijgen.
+  email: text(),
+  mailAan: boolean("mail_aan").notNull().default(true),
   bijgewerkt: timestamp("bijgewerkt", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -56,6 +59,12 @@ export const partijen = pgTable("partijen", {
   clubId: text("club_id").notNull(),
   opmerking: text().notNull().default(""),
   aangemaaktDoor: integer("aangemaakt_door").references(() => spelers.id, { onDelete: "set null" }),
+  // Automatisch aanvullen: de site nodigt passende spelers per e-mail uit tot er vier hebben bevestigd.
+  automatisch: boolean().notNull().default(false),
+  // Wie de baan boekt (gekozen zodra vier spelers hebben bevestigd).
+  boekerId: integer("boeker_id").references(() => spelers.id, { onDelete: "set null" }),
+  // Of de "gaat door"-mail al is verstuurd voor de huidige vier spelers.
+  compleetGemeld: boolean("compleet_gemeld").notNull().default(false),
   aangemaakt: timestamp("aangemaakt", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -66,6 +75,12 @@ export const partijDeelnemers = pgTable(
     partijId: integer("partij_id").notNull().references(() => partijen.id, { onDelete: "cascade" }),
     spelerId: integer("speler_id").notNull().references(() => spelers.id, { onDelete: "cascade" }),
     aangemeld: timestamp("aangemeld", { withTimezone: true }).notNull().defaultNow(),
+    // "uitgenodigd" (wacht op antwoord), "bevestigd", "afgezegd" of "verlopen" (niet op tijd gereageerd).
+    status: text().notNull().default("bevestigd"),
+    // Geheime sleutel voor de knoppen in de e-mail (bevestigen zonder inloggen).
+    token: text().unique(),
+    uitgenodigd: timestamp("uitgenodigd", { withTimezone: true }),
+    herinnerd: boolean().notNull().default(false),
   },
   (t) => [primaryKey({ columns: [t.partijId, t.spelerId] })]
 );
