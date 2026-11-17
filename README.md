@@ -13,6 +13,15 @@ Een kleine Netlify-site waarmee een groep padelspelers hun niveau, gewenste tege
 - **Banen en prijzen**: vier clubs (Peakz Padel Assen, Valley Padel Assen, Plaza Sportz Assen, Padel Rolde), alleen dubbelbanen, met status "vrij / bezet / nog niet boekbaar (opent over X dagen)" en prijs per baan en per persoon.
 - ATV De Hertenkamp is bewust weggelaten (buitenbanen, weer).
 
+## Partijen en e-mail
+
+- **Weekvoorstel:** een dag na de invuldeadline van een week stelt de site zelf partijen voor. Dat gebeurt op basis van beschikbaarheid, niveau, speelduur en clubvoorkeur. De site houdt ook rekening met hoe vaak iemand wil spelen: 1x per week, 2x per week of om de week. Wie minder speelde of vaker reserve was, krijgt voorrang. Banen die live vrij zijn gaan voor, en bij gelijke keus wint de goedkoopste club. Wie ook kan maar niet is ingedeeld, komt op de reservelijst.
+- **Zelf maken:** met *Maak partij* bij een moment in Planning maak je zelf een partij.
+- **Bevestigen:** uitgenodigde spelers hebben 24 uur, op de site of via de knoppen in de e-mail. Wie afzegt of niet reageert, wordt vervangen door de eerste reserve. Partijen met een open plek staan onder *Nog 1 speler nodig*, voor spelers met een passend niveau.
+- **Boeken:** als er vier spelers zijn, krijgt degene die het langst niet heeft geboekt de boektaak. Boekt die niet binnen 4 uur nadat boeken kan, dan gaat de taak naar een ander. Na *Baan geboekt*, met baannummer, prijs en eventueel een Tikkie-link, ziet iedereen het bedrag per persoon. Is de baan weg, dan toont de site andere vrije tijden en clubs op dezelfde dag.
+
+E-mail kan gratis via Gmail. Zet `SMTP_USER` op het Gmail-adres en `SMTP_PASS` op een app-wachtwoord van dat account (Google-account → Beveiliging → tweestapsverificatie aan → App-wachtwoorden). Je kunt ook Brevo gebruiken (`BREVO_API_KEY` + `MAIL_AFZENDER`) of Resend (`RESEND_API_KEY` + `MAIL_AFZENDER`). Zonder deze instellingen werkt alles wel, maar dan staan de uitnodigingen alleen op de site.
+
 ## Koppeling met de clubs
 
 - **Live vrije banen** voor alle vier de clubs. De functie `netlify/functions/banen.mts` (`/api/banen?datum=…&slot=19:00-22:00`) haalt per begintijd (elk half uur binnen de gekozen tijd) de vrije **dubbelbanen** met prijs op:
@@ -37,7 +46,10 @@ Iedereen met de link kan de namen en antwoorden zien en invullen. Optioneel: ste
 
 - `public/index.html`: de pagina
 - `src/auth.js`: inloggen, bij de build gebundeld naar `public/auth.js`
-- `public/planner.js`: matching, boekingshorizon, prijzen (incl. daltarief)
+- `src/planner.cjs`: matching, boekingshorizon, prijzen (incl. daltarief). Bij de build wordt dit gebundeld naar `public/planner.js` en de server gebruikt het ook
+- `lib/partijen.ts`: partijen, reserves, boektaak en automatische weekplanning
+- `lib/mail.ts`: e-mail versturen (Brevo of Resend)
+- `netlify/functions/partijen-onderhoud.mts`: draait elk kwartier voor termijnen, herinneringen, doorgeven van de boektaak en het weekvoorstel
 - `public/clubs.json`: clubs, horizons en prijzen
 - `netlify/functions/banen.mts`: live vrije banen (`/api/banen`)
 - `netlify/functions/api.mts`: `/api/spelers` (ophalen), `/api/profiel` (vaste instellingen) `/api/beschikbaarheid` (één week) en `/api/clubs` (clubgegevens)

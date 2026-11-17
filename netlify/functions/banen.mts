@@ -258,7 +258,12 @@ export default async (req: Request) => {
   await Promise.all(
     bronnen.map(async ([id, haalOp]) => {
       try {
-        clubs[id] = await haalOp();
+        // Eén keer opnieuw proberen: de systemen van de clubs haperen soms even.
+        clubs[id] = await haalOp().catch(async (e) => {
+          console.warn(`Beschikbaarheid ${id} eerste poging mislukt`, e);
+          await new Promise((r) => setTimeout(r, 400));
+          return haalOp();
+        });
       } catch (e) {
         alleGelukt = false;
         console.error(`Beschikbaarheid ${id} mislukt`, e);

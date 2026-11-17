@@ -644,14 +644,15 @@
     if (!liveCache.has(key)) {
       liveCache.set(key, fetch('/api/banen?datum=' + dag + '&slot=' + slot)
         .then((r) => (r.ok ? r.json() : null)).catch(() => null)
-        .then((d) => { if (!d) liveCache.delete(key); return d; }));
+        // Niet bewaren als een club niet bereikbaar was, zodat het de volgende keer opnieuw geprobeerd wordt.
+        .then((d) => { if (!d || Object.values(d.clubs || {}).some((c) => !c.live)) liveCache.delete(key); return d; }));
     }
     return liveCache.get(key);
   }
   // Live situatie van één club in een tijdvak voor de gevraagde speelduren.
   function liveVoor(live, club, duren, slot) {
     const c = live && live.clubs && live.clubs[club.id];
-    if (!c || !c.live) return null;
+    if (!c || !c.live) return { soort: 'fout', link: club.boeken };
     if (!c.boekbaar) return { soort: 'nog-niet', boekbaarTot: c.boekbaarTot, link: c.boekingsLink };
     const diep = !!c.diepeLink;
     const venster = P.leesTijd(slot);
@@ -673,6 +674,7 @@
   const liveLink = (lv, dag, t) => !lv.diep ? lv.link : lv.link + '?date=' + dag + '&time=' + t.tijd + '&duration=' + t.duur + '&court=' + encodeURIComponent(t.baanId);
   const duurLabel = (d) => (String(d) === '60' ? '1 uur' : '1,5 uur');
   function liveRegel(club, lv, dag) {
+    if (lv.soort === 'fout') return [h('span', { class: 'let' }, 'live vrije banen konden nu niet worden opgehaald – klik op "Vernieuw" of kijk bij de club'), ' ', h('a', { class: 'knop rustig', href: lv.link, target: '_blank', rel: 'noopener' }, 'Naar ' + club.naam + ' ↗')];
     if (lv.soort === 'vol') return [h('span', { class: 'st-te-laat' }, 'live: geen dubbelbaan vrij binnen deze tijd'), ' ', h('a', { class: 'knop rustig', href: lv.diep ? lv.link + '?date=' + dag : lv.link, target: '_blank', rel: 'noopener' }, 'Bekijk ' + club.naam + ' ↗')];
     if (lv.soort === 'nog-niet') return [h('span', { class: 'let' }, 'nog niet boekbaar' + (lv.boekbaarTot ? ' (nu boekbaar t/m ' + dagLabel(lv.boekbaarTot) + ')' : '')), ' ', h('a', { class: 'knop rustig', href: lv.link, target: '_blank', rel: 'noopener' }, 'Naar ' + club.naam + ' ↗')];
     return [h('span', { class: 'st-ingevuld' }, 'live vrij:'), h('div', { class: 'boekrij' }, lv.tijden.map((t) =>
@@ -699,10 +701,10 @@
     // Per moment: live gegevens toevoegen en bepalen of er zeker een baan vrij is.
     const momenten = kandidaten.map((m, i) => {
       const opties = m.opties.map((o) => Object.assign({}, o, { lv: o.club.live ? liveVoor(lives[i], o.club, m.duren, m.slot.id) : null }));
-      const rang = (o) => (o.lv ? { vrij: 0, vol: 3, 'nog-niet': 2 }[o.lv.soort] : o.status.soort === 'boekbaar' ? 1 : 2);
+      const rang = (o) => (o.lv ? { vrij: 0, fout: 1, vol: 3, 'nog-niet': 2 }[o.lv.soort] : o.status.soort === 'boekbaar' ? 1 : 2);
       opties.sort((a, b) => rang(a) - rang(b) || ((a.lv && a.lv.tijden ? a.lv.tijden[0].prijs : a.prijs ? a.prijs.perBaan : 1e9) - (b.lv && b.lv.tijden ? b.lv.tijden[0].prijs : b.prijs ? b.prijs.perBaan : 1e9)));
       const zeker = opties.some((o) => o.lv && o.lv.soort === 'vrij');
-      const misschien = opties.some((o) => !o.lv && o.status.soort === 'boekbaar');
+      const misschien = opties.some((o) => (!o.lv || o.lv.soort === 'fout') && o.status.soort === 'boekbaar');
       return Object.assign({}, m, { opties, klasse: zeker ? 0 : misschien ? 1 : 2 });
     });
     momenten.sort((a, b) => a.klasse - b.klasse || b.spelers.length - a.spelers.length || a.datum.localeCompare(b.datum));
