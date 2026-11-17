@@ -72,9 +72,11 @@
   // Schuifbalken lopen van 07:00 tot 23:00 in stappen van een half uur.
   const DAG_VAN = 7 * 60, DAG_TOT = 23 * 60, STAP = 30;
   const VENSTER_DAGEN = 14;
-  // Beschikbaarheid vul je per week in, uiterlijk 2 weken van tevoren.
-  const WEKEN_ZICHTBAAR = 4; // deze week + 3 weken vooruit
-  const DEADLINE_DAGEN = 14;
+  // Beschikbaarheid vul je per week in, voor de hele periode waarin je bij een club al een baan kunt reserveren.
+  const WEKEN_ZICHTBAAR = 5;
+  // Als er geen boekingshorizon bekend is, wordt een maand aangehouden. Nooit verder dan dit vooruit plannen.
+  const HORIZON_STANDAARD = 28;
+  const HORIZON_MAX = 6 * 7;
   const FREQUENTIES = [
     { id: 'wanneer-het-lukt', label: 'Wanneer het lukt' },
     { id: 'tweewekelijks', label: 'Om de week' },
@@ -152,18 +154,21 @@
     const ma = parseKey(weekKey);
     return volgendeDagen(ma, 7);
   }
-  function deadline(weekKey) {
-    const d = parseKey(weekKey);
-    d.setDate(d.getDate() - DEADLINE_DAGEN);
-    return dagKey(d);
+  // Hoe ver vooruit er bij minstens één club een baan te reserveren is (de langste boekingshorizon), in dagen.
+  function boekingsHorizon(clubs) {
+    const h = (clubs || []).map((c) => Number(c.horizonDagen)).filter((n) => Number.isFinite(n) && n > 0);
+    return Math.min(HORIZON_MAX, h.length ? Math.max(...h) : HORIZON_STANDAARD);
   }
-  // Status van een week voor één speler: ingevuld, open (deadline nog niet voorbij) of te laat.
-  function weekStatus(speler, weekKey, today) {
+  // De weken (maandagen) van deze week tot en met de week waarin de boekingshorizon eindigt.
+  function wekenBinnenHorizon(today, clubs) {
+    const laatste = new Date(today.getFullYear(), today.getMonth(), today.getDate() + boekingsHorizon(clubs));
+    return weken(today, Math.round(dagenTussen(maandagVan(today), maandagVan(laatste)) / 7) + 1);
+  }
+  // Status van een week voor één speler: ingevuld of nog open.
+  function weekStatus(speler, weekKey) {
     const w = speler && speler.weken && speler.weken[weekKey];
-    const dl = deadline(weekKey);
-    const dagenTot = dagenTussen(today, parseKey(dl));
-    if (w) return { soort: 'ingevuld', bijgewerkt: w.bijgewerkt, deadline: dl, dagenTotDeadline: dagenTot };
-    return { soort: dagenTot >= 0 ? 'open' : 'te-laat', deadline: dl, dagenTotDeadline: dagenTot };
+    if (w) return { soort: 'ingevuld', bijgewerkt: w.bijgewerkt };
+    return { soort: 'open' };
   }
   // Alle weken samenvoegen tot één overzicht datum -> tijdvakken
   function beschikbaarVan(speler) {
@@ -350,9 +355,9 @@
 
   return {
     NIVEAUS, NIVEAU_MIN, NIVEAU_MAX, NIVEAU_STAP, niveauGetal, rangeVan, geldigNiveau, niveauLabel, wensBereik, geldigeWens, wilMet, wensLabel, DUREN, SLOTS, OUDE_SLOTS, DAG_VAN, DAG_TOT, STAP, VENSTER_DAGEN,
-    naarMin, naarTijd, leesTijd, tijdId, tijdLabel, tijdenVan, normaliseer, vrijVanaf, WEKEN_ZICHTBAAR, DEADLINE_DAGEN, VOORKEUREN, FREQUENTIES,
+    naarMin, naarTijd, leesTijd, tijdId, tijdLabel, tijdenVan, normaliseer, vrijVanaf, WEKEN_ZICHTBAAR, HORIZON_STANDAARD, HORIZON_MAX, VOORKEUREN, FREQUENTIES,
     dagKey, parseKey, dagenTussen, volgendeDagen,
-    maandagVan, weken, dagenVanWeek, deadline, weekStatus, beschikbaarVan, voorkeurVan, clubOk,
+    maandagVan, weken, dagenVanWeek, boekingsHorizon, wekenBinnenHorizon, weekStatus, beschikbaarVan, voorkeurVan, clubOk,
     compatibel, groepenVanVier, status, prijs, isDal, voegClubsSamen, plan
   };
 });

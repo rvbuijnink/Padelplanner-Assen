@@ -308,7 +308,7 @@
   <div class="paneel" id="paneel-beschikbaarheid" hidden>
     <section>
       <h2>Beschikbaarheid per week</h2>
-      <div class="uitleg">Vul je beschikbaarheid <strong>uiterlijk 2 weken van tevoren</strong> in, zodat er op tijd een baan geboekt kan worden. Je kunt het daarna altijd nog aanpassen.</div>
+      <div class="uitleg" id="weken-uitleg">Vul je beschikbaarheid in voor alle weken waarin je al een baan kunt reserveren. Zo kan de planner potjes maken zodra er een baan vrij is. Je kunt het altijd nog aanpassen.</div>
       <div class="weken" id="weken"></div>
       <h3 id="week-titel" style="margin:0 0 8px;font-size:1.02rem"></h3>
       <p class="hint" id="week-status"></p>
@@ -375,7 +375,7 @@
       <button type="button" class="rustig" id="toon-overzicht">Toon overzicht</button>
       <div class="melding" id="overzicht-melding" role="status"></div>
       <div class="scroll"><table class="overzicht" id="overzicht"></table></div>
-      <p class="hint">✓ ingevuld · – nog open · ! deadline voorbij en nog niet ingevuld</p>
+      <p class="hint">✓ ingevuld · – nog niet ingevuld</p>
     </section>
   </div>
 </main>
@@ -386,8 +386,18 @@
 (async function () {
   const P = window.Planner;
   const today = new Date();
-  const weken = P.weken(today);
-  const planDagen = [].concat(...weken.map(P.dagenVanWeek)).filter((d) => P.dagenTussen(today, P.parseKey(d)) >= 0);
+  // De weken en dagen lopen tot zo ver vooruit als je bij een club een baan kunt reserveren (na het laden van de clubs).
+  let weken = P.weken(today);
+  let planDagen = [];
+  let horizonDagen = P.HORIZON_STANDAARD;
+  function zetPeriode() {
+    horizonDagen = P.boekingsHorizon(clubs);
+    weken = P.wekenBinnenHorizon(today, clubs);
+    planDagen = [].concat(...weken.map(P.dagenVanWeek)).filter((d) => { const n = P.dagenTussen(today, P.parseKey(d)); return n >= 0 && n <= horizonDagen; });
+    const sel = $('kies-dag'), gekozen = sel.value;
+    sel.replaceChildren(...planDagen.map((d) => h('option', { value: d }, dagLabel(d))));
+    if (planDagen.includes(gekozen)) sel.value = gekozen;
+  }
   let clubs = [];
   let spelers = [];
   let actieveWeek = null;
@@ -481,27 +491,22 @@
 
   // ---- Beschikbaarheid per week ----
   function statusVan(speler, week) {
-    const st = P.weekStatus(speler, week, today);
+    const st = P.weekStatus(speler, week);
     if (st.soort === 'ingevuld') return { klasse: 'st-ingevuld', kort: '✓ ingevuld', lang: 'Ingevuld, laatst aangepast ' + tijdLabel(st.bijgewerkt) + '. Je kunt het nog aanpassen.' };
-    if (st.soort === 'te-laat') return { klasse: 'st-te-laat', kort: '! nog invullen', lang: 'De deadline (' + dagLabel(st.deadline) + ') is voorbij. Vul deze week zo snel mogelijk in.' };
-    const wanneer = st.dagenTotDeadline === 0 ? 'vandaag' : st.dagenTotDeadline === 1 ? 'morgen' : 'vóór ' + dagLabel(st.deadline);
-    return {
-      klasse: st.dagenTotDeadline <= 3 ? 'st-binnenkort' : 'st-open',
-      kort: 'invullen ' + (st.dagenTotDeadline <= 1 ? wanneer : 'vóór ' + kortLabel(st.deadline)),
-      lang: 'Nog niet ingevuld. Graag invullen ' + wanneer + ' (2 weken van tevoren).'
-    };
+    return { klasse: 'st-open', kort: '– nog invullen', lang: 'Nog niet ingevuld. Hoe eerder je invult, hoe eerder de planner een potje voor je kan zoeken.' };
   }
 
   function standaardWeek() {
     const r = ik();
-    // De eerste week die nog niet is ingevuld, anders de week waarvan de deadline nu is
-    const open = weken.find((w) => P.weekStatus(r, w, today).soort !== 'ingevuld');
-    return open || weken[Math.min(2, weken.length - 1)];
+    // De eerste week die nog niet is ingevuld, anders deze week
+    const open = weken.find((w) => P.weekStatus(r, w).soort !== 'ingevuld');
+    return open || weken[0];
   }
 
   function toonWeken() {
     const r = ik();
-    if (!actieveWeek) actieveWeek = standaardWeek();
+    if (!actieveWeek || !weken.includes(actieveWeek)) actieveWeek = standaardWeek();
+    $('weken-uitleg').textContent = 'Vul je beschikbaarheid in voor alle weken waarin je al een baan kunt reserveren. De club die het verst vooruit boekt, opent banen ' + horizonDagen + ' dagen van tevoren (t/m ' + dagLabel(planDagen[planDagen.length - 1]) + '). Zo kan de planner een potje maken zodra er vier spelers kunnen en een baan vrij is. Je kunt het altijd nog aanpassen.';
     $('weken').replaceChildren(...weken.map((w, i) => {
       const st = statusVan(r, w);
       const titel = i === 0 ? 'Deze week' : i === 1 ? 'Volgende week' : 'Over ' + i + ' weken';
@@ -686,14 +691,14 @@
     if (!overzichtSpelers) { t.replaceChildren(); return; }
     if (!overzichtSpelers.length) { t.replaceChildren(h('tbody', {}, h('tr', {}, h('td', {}, 'Nog geen spelers.')))); return; }
     t.replaceChildren(
-      h('thead', {}, h('tr', {}, h('th', {}, 'Speler'), weken.map((w) => h('th', {}, 'Week ' + kortLabel(w), h('br'), h('span', { class: 'hint' }, 'deadline ' + kortLabel(P.deadline(w))))))),
+      h('thead', {}, h('tr', {}, h('th', {}, 'Speler'), weken.map((w) => h('th', {}, 'Week ' + kortLabel(w))))),
       h('tbody', {}, overzichtSpelers.map((s) => h('tr', {}, h('td', {}, s.naam), weken.map((w) => {
-        const st = P.weekStatus(s, w, today);
+        const st = P.weekStatus(s, w);
         if (st.soort === 'ingevuld') {
           const leeg = !Object.keys(s.weken[w].tijdvakken).length;
           return h('td', { class: 'st-ingevuld', title: 'Aangepast ' + tijdLabel(st.bijgewerkt) }, leeg ? '✓ kan niet' : '✓');
         }
-        return st.soort === 'te-laat' ? h('td', { class: 'st-te-laat' }, '!') : h('td', { class: 'st-open' }, '–');
+        return h('td', { class: 'st-open' }, '–');
       })))));
   }
   async function laadOverzicht() {
@@ -1010,7 +1015,8 @@
           const data = await r.json();
           if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');
           await laadClubs();
-          toonPlanner(); toonBanen(); toonBeheer();
+          zetPeriode();
+          toonWeken(); toonRaster(); toonPlanner(); toonBanen(); toonBeheer();
           const m = document.querySelector('#beheer .clubkaart:nth-child(' + (basisClubs.indexOf(basis) + 1) + ') .melding');
           if (m) { m.textContent = 'Opgeslagen.'; m.className = 'melding ok'; }
         } catch (err) { melding.textContent = err.message; melding.className = 'melding fout'; }
@@ -1183,7 +1189,6 @@
   });
 
   // ---- Start ----
-  planDagen.forEach((d) => $('kies-dag').append(h('option', { value: d }, dagLabel(d))));
   for (let m = P.DAG_VAN; m <= P.DAG_TOT; m += P.STAP) {
     if (m + 60 <= P.DAG_TOT) $('kies-van').append(h('option', { value: P.naarTijd(m) }, P.naarTijd(m)));
     if (m >= P.DAG_VAN + 60) $('kies-tot').append(h('option', { value: P.naarTijd(m) }, P.naarTijd(m)));
@@ -1191,6 +1196,7 @@
   $('kies-van').value = '19:00';
   $('kies-tot').value = '22:00';
   await laadClubs();
+  zetPeriode();
   $('padelchecker').href = padelcheckerUrl;
   bouwVoorkeur();
   // Terugkomen via een link uit een e-mail (bevestigen, wachtwoord vergeten, uitnodiging).
