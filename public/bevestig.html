@@ -55,7 +55,7 @@
     uitgenodigd: 'Je hebt nog niet gereageerd.',
     bevestigd: info.reserve ? 'Je staat op de reservelijst.' : 'Je hebt bevestigd dat je meedoet.',
     afgezegd: 'Je hebt afgezegd.',
-    verlopen: 'Je hebt niet op tijd gereageerd, dus je plek is aan iemand anders gegeven. Je kunt je nog wel opgeven; is het potje vol, dan kom je op de reservelijst.'
+    verlopen: 'Je hebt niet op tijd gereageerd, dus je plek is aan iemand anders gegeven. Je kunt je nog wel opgeven; is de partij vol, dan kom je op de reservelijst.'
   }[info.status] || '';
   const lijst = el('ul');
   info.spelers.forEach((s) => lijst.append(el('li', null, s.naam + (s.status === 'uitgenodigd' ? ' (nog geen antwoord)' : ' ✓'))));
@@ -68,7 +68,7 @@
     el('p', null, dag(p.datum) + ' van ' + p.tijd + ' tot ' + eind(p.tijd, p.duur) + (club ? ' bij ' + club.naam : '')),
     el('p', 'zacht', 'Spelers:'), lijst,
     el('p', info.status === 'verlopen' ? 'let' : 'zacht', statusTekst),
-    info.voorbij ? el('p', 'fout', 'Dit potje is al voorbij.') : el('div', 'knoppen'),
+    info.voorbij ? el('p', 'fout', 'Deze partij is al voorbij.') : el('div', 'knoppen'),
     melding);
   if (info.voorbij) return;
   if (keuze) melding.replaceChildren(el('span', 'zacht', 'Klik op de knop om je antwoord te bevestigen.'));

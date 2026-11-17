@@ -1,5 +1,5 @@
 {
-  "_uitleg": "Standaardwaarden per club. Echte prijzen, boekingshorizon en openingstijd van de boekingen vul je in via het tabblad Beheer; die overschrijven de waarden hier. prijsPerBaan60 hier is een voorbeeldprijs (prijsBron 'demo').",
+  "_uitleg": "Standaardwaarden per club. Prijzen en vrije banen komen live uit de boekingssystemen; deze waarden zijn alleen een terugval (bijv. voor hoe ver vooruit de weken lopen). prijsPerBaan60 hier is een voorbeeldprijs (prijsBron 'demo').",
   "clubs": [
     {
       "id": "peakz",
@@ -56,8 +56,22 @@
       "boeken": "https://boeken.padelrolde.nl/nl/booking",
       "systeem": "RacketIQ",
       "live": true
+    },
+    {
+      "id": "hertenkamp",
+      "naam": "ATV De Hertenkamp",
+      "type": "outdoor",
+      "banen": 2,
+      "horizonDagen": 14,
+      "horizonBevestigd": false,
+      "opentOm": null,
+      "prijsPerBaan60": 25,
+      "prijsBron": "demo",
+      "boeken": "https://meetandplay.nl/club/03152",
+      "systeem": "KNLTB Meet & Play (niet-leden); leden boeken via de club-app",
+      "live": true
     }
   ],
   "padelchecker": "https://www.padelchecker.nl/",
-  "_live": "live = true: vrije banen worden live opgehaald via /api/banen (RacketIQ voor Valley en Rolde, Foys voor Peakz, Meet & Play voor Plaza)."
+  "_live": "live = true: vrije banen worden live opgehaald via /api/banen (RacketIQ voor Valley en Rolde, Foys voor Peakz, Meet & Play voor Plaza en De Hertenkamp)."
 }

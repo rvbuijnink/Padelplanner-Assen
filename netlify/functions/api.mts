@@ -6,18 +6,37 @@
 // GET /api/clubs             -> door de beheerder ingevulde clubgegevens (prijzen, boekingshorizon)
 // PUT /api/clubs             -> clubgegevens van één club opslaan (beheercode nodig als BEHEER_CODE is ingesteld)
 // GET /api/overzicht         -> wie heeft welke week ingevuld (alleen beheerder, beheercode nodig)
-// GET /api/partijen          -> komende geplande potjes met wie zich heeft opgegeven (ingelogd)
-// POST /api/partijen         -> nieuw potje plannen; je geeft je daarmee zelf op (ingelogd)
-// POST /api/partijen/aanmelden | /afmelden | /verwijderen  { id } (ingelogd)
+// GET /api/partijen          -> komende geplande partijen: je eigen partijen, of alle partijen voor de beheerder (ingelogd)
+// POST /api/partijen         -> nieuwe partij plannen; je geeft je daarmee zelf op (ingelogd)
+// POST /api/partijen/aanmelden | /afmelden | /verwijderen | /geboekt | /nietgeboekt  { id } (ingelogd)
+// POST /api/partijen/betaallink { id, link }  -> wie boekt deelt een Tikkie; de anderen krijgen die per mail
+// POST /api/partijen/betaald | /nietbetaald { id, spelerId } -> bijhouden wie zijn deel heeft betaald
 // GET  /api/antwoord?t=...   -> gegevens van een uitnodiging uit de e-mail (geen inlog nodig, de sleutel is genoeg)
 // POST /api/antwoord         { t, a: "ja" | "nee" } -> uitnodiging beantwoorden
 import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { getUser, verifyRequestOrigin, AuthError } from "@netlify/identity";
 import { db } from "../../db/index.js";
-import { beantwoord, werkPartijBij, zoekUitnodiging, spelendVan, isActief } from "../../lib/automatisch.js";
+import { beantwoord, werkPartijBij, deelBetaallink, zoekUitnodiging, spelendVan, isActief } from "../../lib/automatisch.js";
 import { spelers, beschikbaarheid, clubGegevens, partijen, partijDeelnemers } from "../../db/schema.js";
 
-const NIVEAUS = ["n80", "n85", "n90", "n95"];
+// Met welk niveau je wilt spelen: één range van-tot, opgeslagen als ["8.0-9.2"].
+function leesWens(x: unknown): string[] | null {
+  let van: unknown, tot: unknown;
+  if (Array.isArray(x) && x.length === 1 && typeof x[0] === "string") [van, tot] = x[0].split("-");
+  else if (x && typeof x === "object" && !Array.isArray(x)) ({ van, tot } = x as any);
+  else return null;
+  const a = leesNiveau(van), b = leesNiveau(tot);
+  if (!a || !b || Number(a) > Number(b)) return null;
+  return [a + "-" + b];
+}
+// Speelsterkte: 7.0 t/m 10.0 in stapjes van 0.1, opgeslagen als tekst met één decimaal (bv. "8.2").
+function leesNiveau(x: unknown): string | null {
+  const g = typeof x === "number" ? x : typeof x === "string" ? Number(x.replace(",", ".")) : NaN;
+  if (!Number.isFinite(g)) return null;
+  const t = Math.round(g * 10);
+  if (Math.abs(g * 10 - t) > 1e-6 || t < 70 || t > 100) return null;
+  return (t / 10).toFixed(1);
+}
 const DUREN = ["60", "90"];
 // Oude dagdelen worden omgezet naar tijden; nieuwe invoer is "UU:MM-UU:MM" (per half uur).
 const OUDE_SLOTS: Record<string, [number, number]> = { ochtend: [540, 720], middag: [720, 1020], avond1: [1020, 1140], avond2: [1140, 1320] };
@@ -44,8 +63,10 @@ function leesTijden(lijst: unknown[]): string[] | null {
   return out.map(([a, b]) => hhmm(a) + "-" + hhmm(b));
 }
 const FREQ = ["wanneer-het-lukt", "tweewekelijks", "wekelijks", "2x-per-week"];
-const CLUBS = ["peakz", "valley", "plaza", "rolde"];
-const VOORKEUR = ["wel", "niet"];
+const CLUBS = ["peakz", "valley", "plaza", "rolde", "hertenkamp"];
+// "zomer" (alleen lente en zomer) kan alleen bij buitenbanen.
+const BUITEN = ["hertenkamp"];
+const VOORKEUR = ["wel", "zomer", "niet"];
 const MAX_WEKEN_VOORUIT = 6;
 
 const json = (data: unknown, status = 200) =>
@@ -141,18 +162,23 @@ async function overzicht(req: Request) {
   });
 }
 
-// ---- Geplande potjes ----
+// ---- Geplande partijen ----
 const MAX_SPELERS = 4;
-async function allePartijen(user: Gebruiker) {
+// Spelers zien alleen hun eigen partijen (waarvoor ze zijn uitgenodigd, waar ze meedoen of reserve zijn,
+// of die ze zelf hebben gepland). De beheerder ziet alle partijen.
+async function allePartijen(user: Gebruiker, beheer: boolean) {
   const mij = await mijnSpeler(user);
-  const lijst = await db.select().from(partijen).where(gte(partijen.datum, vandaag())).orderBy(asc(partijen.datum), asc(partijen.tijd));
-  const ids = lijst.map((p) => p.id);
-  const rijen = ids.length ? await db.select().from(partijDeelnemers).where(inArray(partijDeelnemers.partijId, ids)) : [];
+  const alle = await db.select().from(partijen).where(gte(partijen.datum, vandaag())).orderBy(asc(partijen.datum), asc(partijen.tijd));
+  const alleIds = alle.map((p) => p.id);
+  const rijen = alleIds.length ? await db.select().from(partijDeelnemers).where(inArray(partijDeelnemers.partijId, alleIds)) : [];
+  const lijst = beheer
+    ? alle
+    : alle.filter((p) => !!mij && (p.aangemaaktDoor === mij.id || rijen.some((r) => r.partijId === p.id && r.spelerId === mij.id && isActief(r))));
   const namen = new Map((await db.select({ id: spelers.id, naam: spelers.naam }).from(spelers)).map((x) => [x.id, x.naam]));
   return lijst.map((p) => {
     const actief = spelendVan({ ...p, rijen: rijen.filter((r) => r.partijId === p.id) });
     const mijnRij = rijen.find((r) => r.partijId === p.id && r.spelerId === mij?.id);
-    const toon = (r: (typeof rijen)[number]) => ({ naam: namen.get(r.spelerId) ?? "?", ik: r.spelerId === mij?.id, status: r.status });
+    const toon = (r: (typeof rijen)[number]) => ({ naam: namen.get(r.spelerId) ?? "?", ik: r.spelerId === mij?.id, status: r.status, boekt: !!p.boekerId && r.spelerId === p.boekerId, id: r.spelerId, betaald: r.betaald });
     const vier = actief.slice(0, MAX_SPELERS);
     return {
       id: p.id,
@@ -169,6 +195,8 @@ async function allePartijen(user: Gebruiker) {
       compleet: vier.length === MAX_SPELERS && vier.every((r) => r.status === "bevestigd"),
       boeker: p.boekerId ? namen.get(p.boekerId) ?? null : null,
       boekerIkke: !!mij && p.boekerId === mij.id,
+      geboekt: p.geboekt,
+      betaallink: p.betaallink,
       deelnemers: vier.map(toon),
       reserves: actief.slice(MAX_SPELERS).map(toon),
     };
@@ -188,7 +216,7 @@ async function maakPartij(user: Gebruiker, b: any) {
   if (duur !== 60 && duur !== 90) return fout("Kies een speelduur.");
   if (!CLUBS.includes(b.clubId)) return fout("Kies een club.");
   const opmerking = typeof b.opmerking === "string" ? b.opmerking.trim().slice(0, 200) : "";
-  // Standaard vult de site het potje zelf aan door passende spelers per e-mail uit te nodigen.
+  // Standaard vult de site de partij zelf aan door passende spelers per e-mail uit te nodigen.
   const automatisch = b.automatisch !== false;
   const [p] = await db
     .insert(partijen)
@@ -203,14 +231,39 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
   const mij = await mijnSpeler(user);
   if (!mij) return fout("Sla eerst je vaste instellingen op.", 404);
   const id = Number(b.id);
-  if (!Number.isInteger(id)) return fout("Onbekend potje.");
+  if (!Number.isInteger(id)) return fout("Onbekende partij.");
   const [p] = await db.select().from(partijen).where(eq(partijen.id, id));
-  if (!p || dagenTussen(vandaag(), p.datum) < 0) return fout("Dit potje bestaat niet (meer).", 404);
+  if (!p || dagenTussen(vandaag(), p.datum) < 0) return fout("Deze partij bestaat niet (meer).", 404);
   if (actie === "aanmelden" || actie === "afmelden") {
     const r = await beantwoord(id, mij.id, actie === "aanmelden");
     return r.ok ? json({ ok: true, tekst: r.tekst }) : fout(r.fout, r.status);
+  } else if (actie === "geboekt" || actie === "nietgeboekt") {
+    if (p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de beheerder) kan dit aanpassen.", 403);
+    await db.update(partijen).set({ geboekt: actie === "geboekt" }).where(eq(partijen.id, id));
+  } else if (actie === "betaallink") {
+    if (p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de beheerder) kan een betaallink delen.", 403);
+    const link = typeof b.link === "string" ? b.link.trim() : "";
+    if (link) {
+      let url: URL | null = null;
+      try { url = new URL(link); } catch {}
+      if (!url || url.protocol !== "https:" || link.length > 500) return fout("Plak een geldige betaallink (die begint met https://).");
+    }
+    const nieuw = link && link !== p.betaallink;
+    await db.update(partijen).set({ betaallink: link || null }).where(eq(partijen.id, id));
+    if (nieuw) await deelBetaallink(id);
+    return json({ ok: true, tekst: !link ? "De betaallink is weggehaald." : nieuw ? "De betaallink is gedeeld. De andere spelers krijgen hem per mail." : "De betaallink stond er al." });
+  } else if (actie === "betaald" || actie === "nietbetaald") {
+    const spelerId = Number(b.spelerId);
+    if (!Number.isInteger(spelerId)) return fout("Onbekende speler.");
+    if (spelerId !== mij.id && p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de speler zelf) kan dit aanpassen.", 403);
+    const r = await db
+      .update(partijDeelnemers)
+      .set({ betaald: actie === "betaald" })
+      .where(and(eq(partijDeelnemers.partijId, id), eq(partijDeelnemers.spelerId, spelerId)))
+      .returning({ id: partijDeelnemers.spelerId });
+    if (!r.length) return fout("Deze speler hoort niet bij deze partij.", 404);
   } else if (actie === "verwijderen") {
-    if (p.aangemaaktDoor !== mij.id && !beheer) return fout("Alleen wie het potje heeft gepland (of de beheerder) kan het verwijderen.", 403);
+    if (p.aangemaaktDoor !== mij.id && !beheer) return fout("Alleen wie de partij heeft gepland (of de beheerder) kan deze verwijderen.", 403);
     await db.delete(partijen).where(eq(partijen.id, id));
   } else return fout("Niet gevonden.", 404);
   return json({ ok: true });
@@ -221,9 +274,10 @@ async function slaProfielOp(user: Gebruiker, b: any) {
   if (naam.length < 1 || naam.length > 40) return fout("Naam is verplicht (max 40 tekens).");
   const key = slug(naam);
   if (!key) return fout("Ongeldige naam.");
-  if (!NIVEAUS.includes(b.niveau)) return fout("Kies je speelsterkte.");
-  if (!Array.isArray(b.wensNiveaus) || !b.wensNiveaus.length || !b.wensNiveaus.every((x: string) => NIVEAUS.includes(x)))
-    return fout("Kies minstens één niveau waarmee je wilt spelen.");
+  const niveau = leesNiveau(b.niveau);
+  if (!niveau) return fout("Kies je speelsterkte (7,0 t/m 10,0).");
+  const wensNiveaus = leesWens(b.wensNiveaus);
+  if (!wensNiveaus) return fout("Kies met welk niveau je wilt spelen (een range tussen 7,0 en 10,0).");
   if (!Array.isArray(b.duren) || !b.duren.length || !b.duren.every((x: string) => DUREN.includes(x)))
     return fout("Kies minstens één speelduur.");
   if (!FREQ.includes(b.frequentie)) return fout("Kies hoe vaak je wilt spelen.");
@@ -231,15 +285,15 @@ async function slaProfielOp(user: Gebruiker, b: any) {
   const clubVoorkeur: Record<string, string> = {};
   for (const c of CLUBS) {
     const v = b.clubVoorkeur?.[c] ?? "wel";
-    if (!VOORKEUR.includes(v)) return fout("Ongeldige baanvoorkeur.");
+    if (!VOORKEUR.includes(v) || (v === "zomer" && !BUITEN.includes(c))) return fout("Ongeldige baanvoorkeur.");
     clubVoorkeur[c] = v;
   }
   if (CLUBS.every((c) => clubVoorkeur[c] === "niet")) return fout("Kies minstens één club waar je wel wilt spelen.");
 
   const waarden = {
     naam,
-    niveau: b.niveau,
-    wensNiveaus: [...new Set<string>(b.wensNiveaus)],
+    niveau,
+    wensNiveaus,
     duren: [...new Set<string>(b.duren)],
     frequentie: b.frequentie,
     clubVoorkeur,
@@ -339,13 +393,13 @@ async function slaClubOp(req: Request, b: any) {
   return json({ ok: true });
 }
 
-// Uitnodiging uit de e-mail: de sleutel in de link bepaalt om welk potje en welke speler het gaat.
+// Uitnodiging uit de e-mail: de sleutel in de link bepaalt om welke partij en welke speler het gaat.
 async function antwoord(req: Request) {
   if (req.method === "GET") {
     const r = await zoekUitnodiging(new URL(req.url).searchParams.get("t") ?? "");
     if (!r) return fout("Deze link klopt niet (meer).", 404);
     const [p] = await db.select().from(partijen).where(eq(partijen.id, r.partijId));
-    if (!p) return fout("Dit potje bestaat niet meer.", 404);
+    if (!p) return fout("Deze partij bestaat niet meer.", 404);
     const rijen = await db.select().from(partijDeelnemers).where(eq(partijDeelnemers.partijId, p.id));
     const namen = new Map((await db.select({ id: spelers.id, naam: spelers.naam }).from(spelers)).map((x) => [x.id, x.naam]));
     const actief = spelendVan({ ...p, rijen });
@@ -389,9 +443,9 @@ export default async (req: Request) => {
     }
     if (pad === "/api/profiel" && schrijven) return await slaProfielOp(user, await leesBody(req));
     if (pad === "/api/beschikbaarheid" && schrijven) return await slaBeschikbaarheidOp(user, await leesBody(req));
-    if (pad === "/api/partijen" && req.method === "GET") return json({ partijen: await allePartijen(user), beheer: isBeheer(req) });
+    if (pad === "/api/partijen" && req.method === "GET") return (async () => { const beheer = isBeheer(req); return json({ partijen: await allePartijen(user, beheer), beheer }); })();
     if (pad === "/api/partijen" && req.method === "POST") return await maakPartij(user, await leesBody(req));
-    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen)$/.exec(pad);
+    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|betaald|nietbetaald)$/.exec(pad);
     if (m && req.method === "POST") return await wijzigPartij(user, m[1], await leesBody(req), isBeheer(req));
     return fout("Niet gevonden.", 404);
   } catch (e) {

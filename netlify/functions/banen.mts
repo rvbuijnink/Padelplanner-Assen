@@ -5,7 +5,7 @@
 // - RacketIQ (Valley Padel Assen, Padel Rolde): per begintijd de vrije banen, daarom vragen we
 //   alleen de begintijden binnen het gevraagde tijdvak op.
 // - Foys (Peakz Padel Assen): openbare zoek-API die per baan alle tijdvakken van een dag geeft.
-// - KNLTB Meet & Play (Plaza Sportz Assen): de openbare clubpagina (Livewire) toont per begintijd
+// - KNLTB Meet & Play (Plaza Sportz Assen, ATV De Hertenkamp): de openbare clubpagina (Livewire) toont per begintijd
 //   de vrije banen. We bootsen dezelfde aanroep na als de pagina zelf doet.
 //
 // Om de clubs niet te belasten wordt elk antwoord 10 minuten gecachet: in het geheugen van de
@@ -26,12 +26,13 @@ const PEAKZ = {
   link: "https://www.peakzpadel.nl/reserveren/court-booking/reservation",
 };
 
-const PLAZA = {
-  id: "plaza",
-  pagina: "https://meetandplay.nl/club/88140",
-  horizonDagen: 21, // "Onze banen zijn 3 weken vooruit te boeken."
-  padelSportId: 2,
-};
+type MpClub = { id: string; pagina: string; horizonDagen: number; padelSportId: number };
+const MEET_AND_PLAY: MpClub[] = [
+  // Plaza Sportz Assen: "Onze banen zijn 3 weken vooruit te boeken."
+  { id: "plaza", pagina: "https://meetandplay.nl/club/88140", horizonDagen: 21, padelSportId: 2 },
+  // ATV De Hertenkamp: 2 buitenbanen. Leden boeken via de club-app, niet-leden via Meet & Play.
+  { id: "hertenkamp", pagina: "https://meetandplay.nl/club/03152", horizonDagen: 14, padelSportId: 2 },
+];
 
 // Tijdvakken zoals in public/planner.js. Begintijden elk half uur, zolang er nog 1 uur past.
 const SLOTS: Record<string, [number, number]> = {
@@ -154,9 +155,9 @@ type MpSessie = { cookie: string; csrf: string; snapshot: string };
 const ontsnap = (t: string) =>
   t.replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 
-let mpSessie: { tot: number; s: MpSessie } | null = null;
-async function nieuweMpSessie(): Promise<MpSessie> {
-  const r = await fetch(PLAZA.pagina, { headers: { "user-agent": UA, accept: "text/html" }, signal: AbortSignal.timeout(8000) });
+const mpSessies = new Map<string, { tot: number; s: MpSessie }>();
+async function nieuweMpSessie(club: MpClub): Promise<MpSessie> {
+  const r = await fetch(club.pagina, { headers: { "user-agent": UA, accept: "text/html" }, signal: AbortSignal.timeout(8000) });
   if (!r.ok) throw new Error("HTTP " + r.status);
   const html = await r.text();
   const csrf = /data-csrf="([^"]+)"/.exec(html)?.[1];
@@ -165,18 +166,22 @@ async function nieuweMpSessie(): Promise<MpSessie> {
   const cookie = r.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
   return { cookie, csrf, snapshot };
 }
-async function mpHtml(updates: Record<string, unknown>, opnieuw = true): Promise<string> {
-  if (!mpSessie || mpSessie.tot < Date.now()) mpSessie = { tot: Date.now() + 30 * 60 * 1000, s: await nieuweMpSessie() };
-  const { cookie, csrf, snapshot } = mpSessie.s;
+async function mpHtml(club: MpClub, updates: Record<string, unknown>, opnieuw = true): Promise<string> {
+  let sessie = mpSessies.get(club.id);
+  if (!sessie || sessie.tot < Date.now()) {
+    sessie = { tot: Date.now() + 30 * 60 * 1000, s: await nieuweMpSessie(club) };
+    mpSessies.set(club.id, sessie);
+  }
+  const { cookie, csrf, snapshot } = sessie.s;
   const r = await fetch("https://meetandplay.nl/livewire/update", {
     method: "POST",
-    headers: { "user-agent": UA, "content-type": "application/json", accept: "application/json", "x-livewire": "true", cookie, referer: PLAZA.pagina },
+    headers: { "user-agent": UA, "content-type": "application/json", accept: "application/json", "x-livewire": "true", cookie, referer: club.pagina },
     body: JSON.stringify({ _token: csrf, components: [{ snapshot, updates, calls: [] }] }),
     signal: AbortSignal.timeout(8000),
   });
   if (!r.ok) {
-    mpSessie = null;
-    if (opnieuw && (r.status === 419 || r.status === 401 || r.status === 403)) return mpHtml(updates, false);
+    mpSessies.delete(club.id);
+    if (opnieuw && (r.status === 419 || r.status === 401 || r.status === 403)) return mpHtml(club, updates, false);
     throw new Error("HTTP " + r.status);
   }
   const d: any = await r.json();
@@ -201,26 +206,26 @@ function leesMpSlots(html: string, tijd: string): Vrij[] {
   }
   return vrij;
 }
-async function plaza(datum: string, slot: string) {
+async function meetAndPlay(club: MpClub, datum: string, slot: string) {
   const vandaag = new Date().toISOString().slice(0, 10);
-  const boekbaarTot = new Date(Date.parse(vandaag) + PLAZA.horizonDagen * 86400000).toISOString().slice(0, 10);
-  if (datum > boekbaarTot) return { live: true, boekbaar: false, boekbaarTot, boekingsLink: PLAZA.pagina, starts: [] };
+  const boekbaarTot = new Date(Date.parse(vandaag) + club.horizonDagen * 86400000).toISOString().slice(0, 10);
+  if (datum > boekbaarTot) return { live: true, boekbaar: false, boekbaarTot, boekingsLink: club.pagina, starts: [] };
   const [j, m, d] = datum.split("-");
   const mpDatum = `${d}-${m}-${j}`;
   // Eerst de begintijden waarop nog iets vrij is, daarna alleen die binnen het tijdvak.
-  const overzicht = await gecachet(`mp:${datum}`, () => mpHtml({ date: mpDatum, tenantSportId: PLAZA.padelSportId }));
+  const overzicht = await gecachet(`mp:${club.id}:${datum}`, () => mpHtml(club, { date: mpDatum, tenantSportId: club.padelSportId }));
   const beschikbaar = new Set([...overzicht.matchAll(/id="time-(\d{2}:\d{2})"/g)].map((x) => x[1]));
   const tijden = begintijden(slot).filter((t) => beschikbaar.has(t));
   const vrij = (
     await Promise.all(
       tijden.map((tijd) =>
-        gecachet(`mp:${datum}:${tijd}`, async () =>
-          leesMpSlots(await mpHtml({ date: mpDatum, tenantSportId: PLAZA.padelSportId, time: tijd }), tijd)
+        gecachet(`mp:${club.id}:${datum}:${tijd}`, async () =>
+          leesMpSlots(await mpHtml(club, { date: mpDatum, tenantSportId: club.padelSportId, time: tijd }), tijd)
         )
       )
     )
   ).flat();
-  return { live: true, boekbaar: true, boekbaarTot, boekingsLink: PLAZA.pagina, starts: perBegintijd(vrij, slot) };
+  return { live: true, boekbaar: true, boekbaarTot, boekingsLink: club.pagina, starts: perBegintijd(vrij, slot) };
 }
 
 const json = (data: unknown, status = 200, cache = false) =>
@@ -253,7 +258,7 @@ export default async (req: Request) => {
   const bronnen: [string, () => Promise<unknown>][] = [
     ...KOPPELINGEN.map((k): [string, () => Promise<unknown>] => [k.id, () => racketIq(k, datum, slot)]),
     [PEAKZ.id, () => peakz(datum, slot)],
-    [PLAZA.id, () => plaza(datum, slot)],
+    ...MEET_AND_PLAY.map((c): [string, () => Promise<unknown>] => [c.id, () => meetAndPlay(c, datum, slot)]),
   ];
   await Promise.all(
     bronnen.map(async ([id, haalOp]) => {

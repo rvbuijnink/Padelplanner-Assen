@@ -48,7 +48,7 @@ export const clubGegevens = pgTable("club_gegevens", {
   bijgewerkt: timestamp("bijgewerkt", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Geplande potjes: een speler zet een moment en club vast, anderen geven zich op.
+// Geplande partijen: een speler zet een moment en club vast, anderen geven zich op.
 export const partijen = pgTable("partijen", {
   id: serial().primaryKey(),
   datum: date().notNull(),
@@ -65,10 +65,14 @@ export const partijen = pgTable("partijen", {
   boekerId: integer("boeker_id").references(() => spelers.id, { onDelete: "set null" }),
   // Of de "gaat door"-mail al is verstuurd voor de huidige vier spelers.
   compleetGemeld: boolean("compleet_gemeld").notNull().default(false),
+  // Of de baan echt geboekt is (aangevinkt door wie boekt of door de beheerder).
+  geboekt: boolean().notNull().default(false),
+  // Betaallink (bijv. een Tikkie) die wie boekt deelt met de andere spelers.
+  betaallink: text(),
   aangemaakt: timestamp("aangemaakt", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Wie zich voor een potje heeft opgegeven. De eerste vier spelen, de rest is reserve.
+// Wie zich voor een partij heeft opgegeven. De eerste vier spelen, de rest is reserve.
 export const partijDeelnemers = pgTable(
   "partij_deelnemers",
   {
@@ -81,6 +85,8 @@ export const partijDeelnemers = pgTable(
     token: text().unique(),
     uitgenodigd: timestamp("uitgenodigd", { withTimezone: true }),
     herinnerd: boolean().notNull().default(false),
+    // Of deze speler zijn deel van de baan heeft betaald aan wie boekte.
+    betaald: boolean().notNull().default(false),
   },
   (t) => [primaryKey({ columns: [t.partijId, t.spelerId] })]
 );

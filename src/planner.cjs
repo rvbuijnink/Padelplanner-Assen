@@ -4,11 +4,59 @@
   else root.Planner = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   const NIVEAUS = [
+    { id: 'n70', label: '7 – 7,5' },
+    { id: 'n75', label: '7,5 – 8' },
     { id: 'n80', label: '8 – 8,5' },
     { id: 'n85', label: '8,5 – 9' },
     { id: 'n90', label: '9 – 9,5' },
     { id: 'n95', label: '9,5 – 10' }
   ];
+  // Speelsterkte is een getal van 7,0 t/m 10,0 in stapjes van 0,1 (opgeslagen als "8.2").
+  // Oudere profielen hebben nog een range-id (bv. 'n80'); die blijven werken.
+  const NIVEAU_MIN = 7, NIVEAU_MAX = 10, NIVEAU_STAP = 0.1;
+  function niveauGetal(niveau) {
+    const oud = /^n(\d{2})$/.exec(niveau || '');
+    if (oud) return Number(oud[1]) / 10;
+    const g = Number(niveau);
+    return Number.isFinite(g) ? g : NaN;
+  }
+  // Bij welke range (id) hoort een speelsterkte? 8,5 valt in '8,5 – 9'; 10,0 valt in '9,5 – 10'.
+  function rangeVan(niveau) {
+    const t = Math.round(niveauGetal(niveau) * 10);
+    if (!Number.isFinite(t)) return null;
+    const b = Math.min(95, Math.max(70, Math.floor(t / 5) * 5));
+    return 'n' + b;
+  }
+  function geldigNiveau(niveau) {
+    const g = Number(niveau);
+    return typeof niveau === 'string' && /^\d{1,2}\.\d$/.test(niveau) && g >= NIVEAU_MIN && g <= NIVEAU_MAX;
+  }
+  const niveauLabel = (niveau) => niveauGetal(niveau).toFixed(1).replace('.', ',');
+  // Met welk niveau iemand wil spelen: een range van-tot, opgeslagen als ["8.0-9.2"].
+  // Oudere profielen hebben nog losse range-id's (bv. ['n80', 'n85']); die blijven werken.
+  const WENS = /^(\d{1,2}\.\d)-(\d{1,2}\.\d)$/;
+  function wensBereik(wens) {
+    const lijst = Array.isArray(wens) ? wens : [];
+    const m = lijst.length === 1 && WENS.exec(lijst[0]);
+    if (m) return [Number(m[1]), Number(m[2])];
+    const oud = lijst.map((id) => niveauGetal(id)).filter(Number.isFinite);
+    if (!oud.length) return null;
+    return [Math.min(...oud), Math.min(NIVEAU_MAX, Math.max(...oud) + 0.5)];
+  }
+  function geldigeWens(wens) {
+    if (!Array.isArray(wens) || wens.length !== 1) return false;
+    const m = WENS.exec(wens[0]);
+    return !!m && geldigNiveau(m[1]) && geldigNiveau(m[2]) && Number(m[1]) <= Number(m[2]);
+  }
+  // Wil iemand met deze wens spelen met iemand van dit niveau?
+  function wilMet(wens, niveau) {
+    const lijst = Array.isArray(wens) ? wens : [];
+    const m = lijst.length === 1 && WENS.exec(lijst[0]);
+    if (!m) return lijst.includes(rangeVan(niveau));
+    const t = Math.round(niveauGetal(niveau) * 10);
+    return t >= Math.round(Number(m[1]) * 10) && t <= Math.round(Number(m[2]) * 10);
+  }
+  const wensLabel = (wens) => { const b = wensBereik(wens); return b ? b.map((g) => g.toFixed(1).replace('.', ',')).join(' – ') : ''; };
   const DUREN = [
     { id: '60', label: '1 uur' },
     { id: '90', label: '1,5 uur' }
@@ -24,9 +72,11 @@
   // Schuifbalken lopen van 07:00 tot 23:00 in stappen van een half uur.
   const DAG_VAN = 7 * 60, DAG_TOT = 23 * 60, STAP = 30;
   const VENSTER_DAGEN = 14;
-  // Beschikbaarheid vul je per week in, uiterlijk 2 weken van tevoren.
-  const WEKEN_ZICHTBAAR = 4; // deze week + 3 weken vooruit
-  const DEADLINE_DAGEN = 14;
+  // Beschikbaarheid vul je per week in, voor de hele periode waarin je bij een club al een baan kunt reserveren.
+  const WEKEN_ZICHTBAAR = 5;
+  // Als er geen boekingshorizon bekend is, wordt een maand aangehouden. Nooit verder dan dit vooruit plannen.
+  const HORIZON_STANDAARD = 28;
+  const HORIZON_MAX = 6 * 7;
   const FREQUENTIES = [
     { id: 'wanneer-het-lukt', label: 'Wanneer het lukt' },
     { id: 'tweewekelijks', label: 'Om de week' },
@@ -35,8 +85,12 @@
   ];
   const VOORKEUREN = [
     { id: 'wel', label: 'Wel' },
+    // Alleen bij buitenbanen: in herfst en winter telt de club als 'niet'.
+    { id: 'zomer', label: 'Alleen lente en zomer', alleenBuiten: true },
     { id: 'niet', label: 'Niet' }
   ];
+  // Lente en zomer: 21 maart t/m 22 september.
+  const LENTE_ZOMER = ['03-21', '09-22'];
 
   const pad = (n) => String(n).padStart(2, '0');
   const dagKey = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
@@ -104,18 +158,21 @@
     const ma = parseKey(weekKey);
     return volgendeDagen(ma, 7);
   }
-  function deadline(weekKey) {
-    const d = parseKey(weekKey);
-    d.setDate(d.getDate() - DEADLINE_DAGEN);
-    return dagKey(d);
+  // Hoe ver vooruit er bij minstens één club een baan te reserveren is (de langste boekingshorizon), in dagen.
+  function boekingsHorizon(clubs) {
+    const h = (clubs || []).map((c) => Number(c.horizonDagen)).filter((n) => Number.isFinite(n) && n > 0);
+    return Math.min(HORIZON_MAX, h.length ? Math.max(...h) : HORIZON_STANDAARD);
   }
-  // Status van een week voor één speler: ingevuld, open (deadline nog niet voorbij) of te laat.
-  function weekStatus(speler, weekKey, today) {
+  // De weken (maandagen) van deze week tot en met de week waarin de boekingshorizon eindigt.
+  function wekenBinnenHorizon(today, clubs) {
+    const laatste = new Date(today.getFullYear(), today.getMonth(), today.getDate() + boekingsHorizon(clubs));
+    return weken(today, Math.round(dagenTussen(maandagVan(today), maandagVan(laatste)) / 7) + 1);
+  }
+  // Status van een week voor één speler: ingevuld of nog open.
+  function weekStatus(speler, weekKey) {
     const w = speler && speler.weken && speler.weken[weekKey];
-    const dl = deadline(weekKey);
-    const dagenTot = dagenTussen(today, parseKey(dl));
-    if (w) return { soort: 'ingevuld', bijgewerkt: w.bijgewerkt, deadline: dl, dagenTotDeadline: dagenTot };
-    return { soort: dagenTot >= 0 ? 'open' : 'te-laat', deadline: dl, dagenTotDeadline: dagenTot };
+    if (w) return { soort: 'ingevuld', bijgewerkt: w.bijgewerkt };
+    return { soort: 'open' };
   }
   // Alle weken samenvoegen tot één overzicht datum -> tijdvakken
   function beschikbaarVan(speler) {
@@ -125,8 +182,18 @@
     }
     return out;
   }
-  // Alles behalve 'niet' telt als 'wel' (ook oudere waarden zoals 'graag' of 'prima').
-  const voorkeurVan = (speler, clubId) => (speler.clubVoorkeur && speler.clubVoorkeur[clubId] === 'niet' ? 'niet' : 'wel');
+  const isLenteZomer = (datumKey) => {
+    const md = String(datumKey).slice(5, 10);
+    return md >= LENTE_ZOMER[0] && md <= LENTE_ZOMER[1];
+  };
+  // Alles behalve 'niet' en 'zomer' telt als 'wel' (ook oudere waarden zoals 'graag' of 'prima').
+  // Met een datum wordt 'zomer' buiten lente en zomer 'niet'; zonder datum blijft het 'zomer'.
+  function voorkeurVan(speler, clubId, datumKey) {
+    const v = speler.clubVoorkeur && speler.clubVoorkeur[clubId];
+    if (v === 'niet') return 'niet';
+    if (v === 'zomer') return datumKey && !isLenteZomer(datumKey) ? 'niet' : 'zomer';
+    return 'wel';
+  }
 
   // Twee spelers passen bij elkaar als ze elkaars niveau accepteren
   // en minstens één speelduur gemeenschappelijk hebben.
@@ -134,34 +201,34 @@
     return a.duren.filter((d) => b.duren.includes(d));
   }
   // Twee spelers moeten ook minstens één club delen waar ze allebei willen spelen.
-  function gedeeldeClub(groep, clubs) {
-    return clubs.some((c) => groep.every((p) => voorkeurVan(p, c.id) !== 'niet'));
+  function gedeeldeClub(groep, clubs, datumKey) {
+    return clubs.some((c) => groep.every((p) => voorkeurVan(p, c.id, datumKey) !== 'niet'));
   }
-  function compatibel(a, b, clubs) {
+  function compatibel(a, b, clubs, datumKey) {
     return (
-      (!clubs || gedeeldeClub([a, b], clubs)) &&
-      a.wensNiveaus.includes(b.niveau) &&
-      b.wensNiveaus.includes(a.niveau) &&
+      (!clubs || gedeeldeClub([a, b], clubs, datumKey)) &&
+      wilMet(a.wensNiveaus, b.niveau) &&
+      wilMet(b.wensNiveaus, a.niveau) &&
       gemeenschappelijkeDuren(a, b).length > 0
     );
   }
 
   // Alle groepjes van 4 waarin iedereen bij iedereen past
   // en alle vier minstens één speelduur gemeen hebben.
-  function groepenVanVier(spelers, clubs) {
+  function groepenVanVier(spelers, clubs, datumKey) {
     const res = [];
     const n = spelers.length;
     for (let i = 0; i < n; i++)
       for (let j = i + 1; j < n; j++) {
-        if (!compatibel(spelers[i], spelers[j], clubs)) continue;
+        if (!compatibel(spelers[i], spelers[j], clubs, datumKey)) continue;
         for (let k = j + 1; k < n; k++) {
-          if (!compatibel(spelers[i], spelers[k], clubs) || !compatibel(spelers[j], spelers[k], clubs)) continue;
+          if (!compatibel(spelers[i], spelers[k], clubs, datumKey) || !compatibel(spelers[j], spelers[k], clubs, datumKey)) continue;
           for (let l = k + 1; l < n; l++) {
             const g = [spelers[i], spelers[j], spelers[k], spelers[l]];
-            if (!compatibel(g[0], g[3], clubs) || !compatibel(g[1], g[3], clubs) || !compatibel(g[2], g[3], clubs)) continue;
+            if (!compatibel(g[0], g[3], clubs, datumKey) || !compatibel(g[1], g[3], clubs, datumKey) || !compatibel(g[2], g[3], clubs, datumKey)) continue;
             const duren = g[0].duren.filter((d) => g.every((p) => p.duren.includes(d)));
             if (duren.length === 0) continue;
-            if (clubs && !gedeeldeClub(g, clubs)) continue;
+            if (clubs && !gedeeldeClub(g, clubs, datumKey)) continue;
             res.push({ spelers: g, duren });
           }
         }
@@ -220,9 +287,9 @@
     });
   }
 
-  // Of de hele groep bij deze club wil spelen.
-  function clubOk(groep, club) {
-    return groep.every((p) => voorkeurVan(p, club.id) !== 'niet');
+  // Of de hele groep bij deze club wil spelen (op die datum, als die is meegegeven).
+  function clubOk(groep, club, datumKey) {
+    return groep.every((p) => voorkeurVan(p, club.id, datumKey) !== 'niet');
   }
 
   // spelers: [{ naam, niveau, wensNiveaus, duren, clubVoorkeur, weken }]
@@ -245,7 +312,7 @@
           if (duren.length) beschikbaar.push(Object.assign({}, r, { duren, rest }));
         }
         if (beschikbaar.length < 4) { vorige = null; continue; }
-        const groepen = groepenVanVier(beschikbaar, clubs);
+        const groepen = groepenVanVier(beschikbaar, clubs, d);
         if (!groepen.length) { vorige = null; continue; }
         const namen = new Set();
         groepen.forEach((g) => g.spelers.forEach((p) => namen.add(p.naam)));
@@ -253,14 +320,14 @@
         // Zelfde spelers als een half uur eerder: dat moment is al gevonden.
         if (vorige && vorige.sleutel === sleutel && t < vorige.tot) continue;
         // Kies het groepje met de meeste gemeenschappelijke speelduren en de meeste clubs waar iedereen wil spelen
-        const aantalClubs = (g) => clubs.filter((c) => clubOk(g.spelers, c)).length;
+        const aantalClubs = (g) => clubs.filter((c) => clubOk(g.spelers, c, d)).length;
         const beste = groepen.slice().sort((a, b) => b.duren.length - a.duren.length || aantalClubs(b) - aantalClubs(a))[0];
         const tot = t + Math.min(...beste.spelers.map((p) => p.rest));
         vorige = { sleutel, tot };
         const id = tijdId(t, tot);
         const slot = { id, van: naarTijd(t), tot: naarTijd(tot), label: tijdLabel(id) };
         const opties = clubs
-          .filter((c) => clubOk(beste.spelers, c))
+          .filter((c) => clubOk(beste.spelers, c, d))
           .map((c) => ({ club: c, status: status(c, d, id, today) }))
           .filter((o) => o.status.soort === 'boekbaar' || o.status.soort === 'nog-niet')
           .map((o) => Object.assign(o, { prijs: prijs(o.club, beste.duren[0], d, id) }))
@@ -301,10 +368,10 @@
   }
 
   return {
-    NIVEAUS, DUREN, SLOTS, OUDE_SLOTS, DAG_VAN, DAG_TOT, STAP, VENSTER_DAGEN,
-    naarMin, naarTijd, leesTijd, tijdId, tijdLabel, tijdenVan, normaliseer, vrijVanaf, WEKEN_ZICHTBAAR, DEADLINE_DAGEN, VOORKEUREN, FREQUENTIES,
+    NIVEAUS, NIVEAU_MIN, NIVEAU_MAX, NIVEAU_STAP, niveauGetal, rangeVan, geldigNiveau, niveauLabel, wensBereik, geldigeWens, wilMet, wensLabel, DUREN, SLOTS, OUDE_SLOTS, DAG_VAN, DAG_TOT, STAP, VENSTER_DAGEN,
+    naarMin, naarTijd, leesTijd, tijdId, tijdLabel, tijdenVan, normaliseer, vrijVanaf, WEKEN_ZICHTBAAR, HORIZON_STANDAARD, HORIZON_MAX, VOORKEUREN, FREQUENTIES,
     dagKey, parseKey, dagenTussen, volgendeDagen,
-    maandagVan, weken, dagenVanWeek, deadline, weekStatus, beschikbaarVan, voorkeurVan, clubOk,
+    maandagVan, weken, dagenVanWeek, boekingsHorizon, wekenBinnenHorizon, weekStatus, beschikbaarVan, voorkeurVan, isLenteZomer, clubOk,
     compatibel, groepenVanVier, status, prijs, isDal, voegClubsSamen, plan
   };
 });
