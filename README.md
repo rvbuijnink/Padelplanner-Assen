@@ -47,16 +47,15 @@ Iedereen met de link kan de namen en antwoorden zien en invullen. Optioneel: ste
 - `public/index.html`: de pagina
 - `src/auth.js`: inloggen, bij de build gebundeld naar `public/auth.js`
 - `src/planner.cjs`: matching, boekingshorizon, prijzen (incl. daltarief). Bij de build wordt dit gebundeld naar `public/planner.js` en de server gebruikt het ook
-- `lib/partijen.ts`: partijen, reserves, boektaak en automatische weekplanning
-- `lib/mail.ts`: e-mail versturen (Brevo of Resend)
-- `netlify/functions/partijen-onderhoud.mts`: draait elk kwartier voor termijnen, herinneringen, doorgeven van de boektaak en het weekvoorstel
+- `lib/automatisch.ts`: partijen, uitnodigingen, reserves, boektaak en automatisch plannen
+- `lib/mail.ts`: e-mail versturen (Gmail/SMTP, Brevo of Resend)
+- `netlify/functions/automatisch-plannen.mts`: draait elk uur; geeft verlopen uitnodigingen vrij, nodigt de volgende speler uit, stuurt de "gaat door"-mail en plant nieuwe potjes
 - `public/clubs.json`: clubs, horizons en prijzen
 - `netlify/functions/banen.mts`: live vrije banen (`/api/banen`)
 - `netlify/functions/api.mts`: `/api/spelers` (ophalen), `/api/profiel` (vaste instellingen) `/api/beschikbaarheid` (één week) en `/api/clubs` (clubgegevens)
-- `db/schema.ts`: tabellen `spelers`, `beschikbaarheid` en `club_gegevens`; na een wijziging `npx drizzle-kit generate --name <naam>`
+- `db/schema.ts`: tabellen `spelers`, `beschikbaarheid`, `club_gegevens`, `partijen` en `partij_deelnemers`; na een wijziging `npx drizzle-kit generate --name <naam>`
 - `netlify.toml`, `package.json`: instellingen
 
 ## Nog te bouwen
 
-- Wekelijkse herinnering (zondagavond, dinsdag voor wie nog niet heeft gereageerd) via een geplande Netlify-functie.
 - Melding op het moment dat de planning van een club voor een gewenste dag opent.
