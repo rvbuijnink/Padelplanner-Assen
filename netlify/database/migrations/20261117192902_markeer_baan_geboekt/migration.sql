@@ -1,0 +1,1 @@
+ALTER TABLE "partijen" ADD COLUMN "geboekt" boolean DEFAULT false NOT NULL;

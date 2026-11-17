@@ -1,8 +1,8 @@
 // Automatisch plannen met e-mail.
-// - De site zoekt zelf momenten waarop vier passende spelers kunnen én er live een baan vrij is, en maakt daar een potje van.
+// - De site zoekt zelf momenten waarop vier passende spelers kunnen én er live een baan vrij is, en maakt daar een partij van.
 // - Die spelers krijgen een uitnodiging per e-mail met "Ik doe mee" / "Kan toch niet".
 // - Wie afzegt of niet op tijd reageert, wordt vervangen door de volgende speler die ook kan.
-// - Hebben vier spelers bevestigd, dan krijgt iedereen een mail dat het potje doorgaat en wie de baan boekt.
+// - Hebben vier spelers bevestigd, dan krijgt iedereen een mail dat de partij doorgaat en wie de baan boekt.
 // Gebruikt door de geplande functie (elk uur) en door de API (direct na een antwoord).
 import { randomBytes } from "node:crypto";
 import { and, eq, gte, inArray } from "drizzle-orm";
@@ -17,9 +17,9 @@ import clubsJson from "../public/clubs.json";
 const P: any = Planner;
 export const MAX_SPELERS = 4;
 const UUR = 3600000;
-// Hoeveel potjes er per run hooguit automatisch worden aangemaakt (voorkomt een stortvloed aan mails).
+// Hoeveel partijen er per run hooguit automatisch worden aangemaakt (voorkomt een stortvloed aan mails).
 const MAX_NIEUW_PER_RUN = 4;
-// Potjes worden minstens zoveel dagen vooruit gepland, zodat er tijd is om te bevestigen en te boeken.
+// Partijen worden minstens zoveel dagen vooruit gepland, zodat er tijd is om te bevestigen en te boeken.
 // Hoe ver vooruit: zo ver als er bij minstens één club gereserveerd kan worden (per club wordt daarna nog gekeken of die dag al boekbaar is).
 const MIN_DAGEN_VOORUIT = 2;
 // Hoe vaak per run hooguit bij de clubs wordt nagevraagd of er een baan vrij is, en hoe lang er hooguit wordt gezocht.
@@ -54,7 +54,7 @@ const dagTekst = (datum: string) =>
 const momentTekst = (ms: number) =>
   new Date(ms).toLocaleString("nl-NL", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
 
-// Uiterste moment om te reageren: de helft van de tijd tot het potje, minstens 2 en hooguit 24 uur.
+// Uiterste moment om te reageren: de helft van de tijd tot de partij, minstens 2 en hooguit 24 uur.
 export function verlooptOp(uitgenodigd: Date, partij: { datum: string; tijd: string }) {
   const start = nlMoment(partij.datum, partij.tijd);
   const marge = Math.min(24 * UUR, Math.max(2 * UUR, (start - uitgenodigd.getTime()) / 2));
@@ -96,7 +96,7 @@ async function laad(): Promise<Context> {
   };
 }
 
-// ---- Wie past bij een potje ----
+// ---- Wie past bij een partij ----
 function kanOp(s: Speler, datum: string, tijd: string, duur: number) {
   if (!s.duren.includes(String(duur))) return false;
   const tijden = P.tijdenVan(P.beschikbaarVan(s)[datum] || []);
@@ -106,7 +106,7 @@ const nivPast = (a: Speler, b: Speler) => P.wilMet(a.wensNiveaus, b.niveau) && P
 const overlapt = (a: Partij, datum: string, tijd: string, duur: number) =>
   a.datum === datum && naarMin(a.tijd) < naarMin(tijd) + duur && naarMin(tijd) < naarMin(a.tijd) + a.duur;
 
-// Hoe vaak iemand per week wil spelen. "Om de week": niet als er de week ervoor of erna al een potje is.
+// Hoe vaak iemand per week wil spelen. "Om de week": niet als er de week ervoor of erna al een partij is.
 function heeftRuimte(ctx: Context, s: Speler, datum: string, behalve?: number) {
   const mijn = ctx.partijen.filter((p) => p.id !== behalve && p.rijen.some((r) => r.spelerId === s.id && isActief(r)));
   const week = maandag(datum);
@@ -124,7 +124,7 @@ function pastBij(ctx: Context, s: Speler, p: { id?: number; datum: string; tijd:
   if (!kanOp(s, p.datum, p.tijd, p.duur)) return false;
   if (!groep.every((g) => nivPast(s, g))) return false;
   if (!heeftRuimte(ctx, s, p.datum, p.id)) return false;
-  // Niet tegelijk in een ander potje, en niet opnieuw vragen op een dag waarop iemand al heeft afgezegd.
+  // Niet tegelijk in een andere partij, en niet opnieuw vragen op een dag waarop iemand al heeft afgezegd.
   for (const q of ctx.partijen) {
     if (q.id === p.id) continue;
     const r = q.rijen.find((x) => x.spelerId === s.id);
@@ -136,12 +136,12 @@ function pastBij(ctx: Context, s: Speler, p: { id?: number; datum: string; tijd:
 }
 
 // Voorrang voor wie de komende tijd het minst speelt.
-const aantalPotjes = (ctx: Context, s: Speler) =>
+const aantalPartijen = (ctx: Context, s: Speler) =>
   ctx.partijen.filter((p) => p.datum >= ctx.vandaag && p.rijen.some((r) => r.spelerId === s.id && isActief(r))).length;
 
 // ---- E-mails ----
 const clubVan = (ctx: Context, id: string) => ctx.clubs.find((c) => c.id === id) || { id, naam: id, boeken: siteUrl() };
-const potjeTekst = (ctx: Context, p: Partij | typeof partijen.$inferSelect) =>
+const partijTekst = (ctx: Context, p: Partij | typeof partijen.$inferSelect) =>
   `${dagTekst(p.datum)} van ${p.tijd} tot ${naarTijd(naarMin(p.tijd) + p.duur)} bij ${clubVan(ctx, p.clubId).naam}`;
 const naamLijst = (namen: string[]) => (namen.length > 1 ? namen.slice(0, -1).join(", ") + " en " + namen[namen.length - 1] : namen.join(""));
 const spelerVan = (ctx: Context, id: number | null) => ctx.spelers.find((s) => s.id === id);
@@ -162,9 +162,9 @@ function uitnodiging(ctx: Context, p: Partij, s: Speler, token: string): Mail | 
     onderwerp: `Padel ${dagTekst(p.datum)} om ${p.tijd}: doe je mee?`,
     tekst:
       `Hoi ${s.naam},\n\n` +
-      "Volgens je beschikbaarheid kun je op dit moment, dus er is een potje voor je gepland.\n\n" +
+      "Volgens je beschikbaarheid kun je op dit moment, dus er is een partij voor je gepland.\n\n" +
       (p.automatisch ? `Bij het plannen was er bij ${clubVan(ctx, p.clubId).naam} nog een baan vrij. Die wordt geboekt zodra alle vier spelers hebben bevestigd.\n\n` : "") +
-      `Wanneer: ${potjeTekst(ctx, p)}\n` +
+      `Wanneer: ${partijTekst(ctx, p)}\n` +
       `Met: ${anderen.length ? naamLijst(anderen) : "nog onbekend"}\n\n` +
       `Laat het weten vóór ${tot}. Reageer je niet op tijd, dan vragen we iemand anders.`,
     knoppen: antwoordLinks(token),
@@ -178,10 +178,10 @@ function gaatDoor(ctx: Context, p: Partij, vier: Speler[], boeker: Speler): Mail
   return vier.filter(kanMail).map((s) => ({
     aan: s.email!,
     naam: s.naam,
-    onderwerp: `Het potje van ${dagTekst(p.datum)} om ${p.tijd} gaat door`,
+    onderwerp: `De partij van ${dagTekst(p.datum)} om ${p.tijd} gaat door`,
     tekst:
-      `Hoi ${s.naam},\n\nAlle vier spelers hebben bevestigd. Het potje gaat door!\n\n` +
-      `Wanneer: ${potjeTekst(ctx, p)}\nSpelers: ${naamLijst(vier.map((x) => x.naam))}\n\n` +
+      `Hoi ${s.naam},\n\nAlle vier spelers hebben bevestigd. De partij gaat door!\n\n` +
+      `Wanneer: ${partijTekst(ctx, p)}\nSpelers: ${naamLijst(vier.map((x) => x.naam))}\n\n` +
       (s.id === boeker.id
         ? `Jij boekt de baan. Doe dat zo snel mogelijk via de knop hieronder.${kosten} Is er geen baan meer vrij? Laat het de anderen weten.`
         : `${boeker.naam} boekt de baan.${kosten}`) +
@@ -190,7 +190,7 @@ function gaatDoor(ctx: Context, p: Partij, vier: Speler[], boeker: Speler): Mail
   }));
 }
 
-// ---- Een potje bijwerken: aanvullen met uitnodigingen en melden als het compleet is ----
+// ---- Een partij bijwerken: aanvullen met uitnodigingen en melden als het compleet is ----
 async function nodigUit(ctx: Context, p: Partij, s: Speler, mails: Mail[]) {
   const token = randomBytes(18).toString("base64url");
   const nu = new Date();
@@ -208,13 +208,13 @@ async function werkBij(ctx: Context, p: Partij, mails: Mail[]) {
   if (start < Date.now()) return;
   const spelend = spelendVan(p);
 
-  // Aanvullen tot vier (niet meer in de laatste 3 uur voor het potje).
+  // Aanvullen tot vier (niet meer in de laatste 3 uur voor de partij).
   if (p.automatisch && spelend.length < MAX_SPELERS && start - Date.now() > 3 * UUR) {
     const groep = spelend.map((r) => spelerVan(ctx, r.spelerId)).filter(Boolean) as Speler[];
     const nieuw: Speler[] = [];
     const kandidaten = ctx.spelers
       .filter((s) => !p.rijen.some((r) => r.spelerId === s.id))
-      .sort((a, b) => aantalPotjes(ctx, a) - aantalPotjes(ctx, b) || a.id - b.id);
+      .sort((a, b) => aantalPartijen(ctx, a) - aantalPartijen(ctx, b) || a.id - b.id);
     for (const s of kandidaten) {
       if (groep.length + nieuw.length >= MAX_SPELERS) break;
       if (pastBij(ctx, s, p, [...groep, ...nieuw])) nieuw.push(s);
@@ -250,7 +250,7 @@ export type Antwoord = { ok: true; tekst: string } | { ok: false; fout: string; 
 export async function beantwoord(partijId: number, spelerId: number, ja: boolean): Promise<Antwoord> {
   const ctx = await laad();
   const p = ctx.partijen.find((x) => x.id === partijId);
-  if (!p || nlMoment(p.datum, p.tijd) < Date.now()) return { ok: false, fout: "Dit potje bestaat niet meer of is al voorbij.", status: 404 };
+  if (!p || nlMoment(p.datum, p.tijd) < Date.now()) return { ok: false, fout: "Deze partij bestaat niet meer of is al voorbij.", status: 404 };
   const s = spelerVan(ctx, spelerId);
   if (!s) return { ok: false, fout: "Onbekende speler.", status: 404 };
   const rij = p.rijen.find((r) => r.spelerId === spelerId);
@@ -273,13 +273,13 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
         .onConflictDoUpdate({ target: [partijDeelnemers.partijId, partijDeelnemers.spelerId], set: waarden });
       p.rijen = [...p.rijen.filter((r) => r.spelerId !== s.id), { ...(rij ?? { partijId: p.id, spelerId: s.id, uitgenodigd: null, herinnerd: false }), ...waarden } as Deelnemer];
       const plek = spelendVan(p).findIndex((r) => r.spelerId === s.id);
-      tekst = plek < MAX_SPELERS ? "Je doet mee!" : "Het potje is al vol. Je staat op de reservelijst en schuift door als iemand afzegt.";
+      tekst = plek < MAX_SPELERS ? "Je doet mee!" : "De partij is al vol. Je staat op de reservelijst en schuift door als iemand afzegt.";
     }
   } else {
-    if (!rij || !isActief(rij)) return { ok: true, tekst: "Je stond al niet (meer) bij dit potje." };
+    if (!rij || !isActief(rij)) return { ok: true, tekst: "Je stond al niet (meer) bij deze partij." };
     const speeldeMee = spelendVan(p).slice(0, MAX_SPELERS).some((r) => r.spelerId === s.id);
     if (p.automatisch) {
-      // Bewaren als afgezegd, zodat we deze speler niet opnieuw voor dit potje vragen.
+      // Bewaren als afgezegd, zodat we deze speler niet opnieuw voor deze partij vragen.
       await db.update(partijDeelnemers).set({ status: "afgezegd" }).where(and(eq(partijDeelnemers.partijId, p.id), eq(partijDeelnemers.spelerId, s.id)));
       rij.status = "afgezegd";
     } else {
@@ -287,7 +287,7 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
       p.rijen = p.rijen.filter((r) => r.spelerId !== s.id);
     }
     tekst = p.automatisch ? "Jammer! We vragen iemand anders." : "Je bent afgemeld.";
-    // Was het potje al compleet, dan horen de anderen het en zoeken we opnieuw.
+    // Was de partij al compleet, dan horen de anderen het en zoeken we opnieuw.
     if (speeldeMee && p.compleetGemeld) {
       const boekerWeg = p.boekerId === s.id;
       await db.update(partijen).set({ compleetGemeld: false, ...(boekerWeg ? { boekerId: null } : {}) }).where(eq(partijen.id, p.id));
@@ -301,8 +301,8 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
           naam: ander.naam,
           onderwerp: `${s.naam} kan toch niet op ${dagTekst(p.datum)}`,
           tekst:
-            `Hoi ${ander.naam},\n\n${s.naam} kan toch niet meedoen aan het potje van ${potjeTekst(ctx, p)}.\n\n` +
-            (p.automatisch ? "We zoeken een vervanger. Je krijgt een mail zodra het potje weer compleet is." : "Kijk op de site of iemand anders kan invallen.") +
+            `Hoi ${ander.naam},\n\n${s.naam} kan toch niet meedoen aan de partij van ${partijTekst(ctx, p)}.\n\n` +
+            (p.automatisch ? "We zoeken een vervanger. Je krijgt een mail zodra de partij weer compleet is." : "Kijk op de site of iemand anders kan invallen.") +
             (boekerWeg ? `\n\nLet op: ${s.naam} zou de baan boeken. Is die al geboekt, spreek dan onderling af wie hem overneemt.` : ""),
           knoppen: [{ label: "Naar de Padelplanner", url: `${siteUrl()}/?tab=planning` }],
         });
@@ -314,7 +314,7 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
   return { ok: true, tekst };
 }
 
-// Na het aanmaken van een potje op de site: meteen aanvullen met uitnodigingen.
+// Na het aanmaken van een partij op de site: meteen aanvullen met uitnodigingen.
 export async function werkPartijBij(partijId: number) {
   const ctx = await laad();
   const p = ctx.partijen.find((x) => x.id === partijId);
@@ -324,7 +324,7 @@ export async function werkPartijBij(partijId: number) {
   await verstuur(mails);
 }
 
-// ---- Nieuwe potjes zoeken ----
+// ---- Nieuwe partijen zoeken ----
 // Speelduur: de langste die iedereen in het groepje wil. Starttijd en club: waar mogelijk een live vrije baan.
 async function liveKeuze(datum: string, slot: any, duur: number, opties: any[]) {
   try {
@@ -351,7 +351,7 @@ async function liveKeuze(datum: string, slot: any, duur: number, opties: any[]) 
   }
 }
 
-async function zoekNieuwePotjes(ctx: Context, mails: Mail[]) {
+async function zoekNieuwePartijen(ctx: Context, mails: Mail[]) {
   // Niet wachten tot iedereen heeft ingevuld: zodra vier passende spelers op hetzelfde moment kunnen, wordt er gepland.
   // Maar alleen als er op dat moment ook echt een baan vrij is: anders worden er geen uitnodigingen verstuurd.
   const dagen: string[] = [];
@@ -435,9 +435,9 @@ export async function automatischPlannen() {
     }
   }
   for (const p of ctx.partijen) await werkBij(ctx, p, mails);
-  const nieuw = await zoekNieuwePotjes(ctx, mails);
+  const nieuw = await zoekNieuwePartijen(ctx, mails);
   await verstuur(mails);
-  console.log(`Automatisch plannen: ${nieuw} nieuw(e) potje(s), ${verlopen} verlopen uitnodiging(en), ${mails.length} e-mail(s).`);
+  console.log(`Automatisch plannen: ${nieuw} nieuwe partij(en), ${verlopen} verlopen uitnodiging(en), ${mails.length} e-mail(s).`);
 }
 
 // Gegevens van een uitnodiging opzoeken via de sleutel uit de e-mail.

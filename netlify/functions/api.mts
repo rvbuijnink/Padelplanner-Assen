@@ -6,9 +6,9 @@
 // GET /api/clubs             -> door de beheerder ingevulde clubgegevens (prijzen, boekingshorizon)
 // PUT /api/clubs             -> clubgegevens van één club opslaan (beheercode nodig als BEHEER_CODE is ingesteld)
 // GET /api/overzicht         -> wie heeft welke week ingevuld (alleen beheerder, beheercode nodig)
-// GET /api/partijen          -> komende geplande potjes: je eigen potjes, of alle potjes voor de beheerder (ingelogd)
-// POST /api/partijen         -> nieuw potje plannen; je geeft je daarmee zelf op (ingelogd)
-// POST /api/partijen/aanmelden | /afmelden | /verwijderen  { id } (ingelogd)
+// GET /api/partijen          -> komende geplande partijen: je eigen partijen, of alle partijen voor de beheerder (ingelogd)
+// POST /api/partijen         -> nieuwe partij plannen; je geeft je daarmee zelf op (ingelogd)
+// POST /api/partijen/aanmelden | /afmelden | /verwijderen | /geboekt | /nietgeboekt  { id } (ingelogd)
 // GET  /api/antwoord?t=...   -> gegevens van een uitnodiging uit de e-mail (geen inlog nodig, de sleutel is genoeg)
 // POST /api/antwoord         { t, a: "ja" | "nee" } -> uitnodiging beantwoorden
 import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
@@ -160,10 +160,10 @@ async function overzicht(req: Request) {
   });
 }
 
-// ---- Geplande potjes ----
+// ---- Geplande partijen ----
 const MAX_SPELERS = 4;
-// Spelers zien alleen hun eigen potjes (waarvoor ze zijn uitgenodigd, waar ze meedoen of reserve zijn,
-// of die ze zelf hebben gepland). De beheerder ziet alle potjes.
+// Spelers zien alleen hun eigen partijen (waarvoor ze zijn uitgenodigd, waar ze meedoen of reserve zijn,
+// of die ze zelf hebben gepland). De beheerder ziet alle partijen.
 async function allePartijen(user: Gebruiker, beheer: boolean) {
   const mij = await mijnSpeler(user);
   const alle = await db.select().from(partijen).where(gte(partijen.datum, vandaag())).orderBy(asc(partijen.datum), asc(partijen.tijd));
@@ -176,7 +176,7 @@ async function allePartijen(user: Gebruiker, beheer: boolean) {
   return lijst.map((p) => {
     const actief = spelendVan({ ...p, rijen: rijen.filter((r) => r.partijId === p.id) });
     const mijnRij = rijen.find((r) => r.partijId === p.id && r.spelerId === mij?.id);
-    const toon = (r: (typeof rijen)[number]) => ({ naam: namen.get(r.spelerId) ?? "?", ik: r.spelerId === mij?.id, status: r.status });
+    const toon = (r: (typeof rijen)[number]) => ({ naam: namen.get(r.spelerId) ?? "?", ik: r.spelerId === mij?.id, status: r.status, boekt: !!p.boekerId && r.spelerId === p.boekerId });
     const vier = actief.slice(0, MAX_SPELERS);
     return {
       id: p.id,
@@ -193,6 +193,7 @@ async function allePartijen(user: Gebruiker, beheer: boolean) {
       compleet: vier.length === MAX_SPELERS && vier.every((r) => r.status === "bevestigd"),
       boeker: p.boekerId ? namen.get(p.boekerId) ?? null : null,
       boekerIkke: !!mij && p.boekerId === mij.id,
+      geboekt: p.geboekt,
       deelnemers: vier.map(toon),
       reserves: actief.slice(MAX_SPELERS).map(toon),
     };
@@ -212,7 +213,7 @@ async function maakPartij(user: Gebruiker, b: any) {
   if (duur !== 60 && duur !== 90) return fout("Kies een speelduur.");
   if (!CLUBS.includes(b.clubId)) return fout("Kies een club.");
   const opmerking = typeof b.opmerking === "string" ? b.opmerking.trim().slice(0, 200) : "";
-  // Standaard vult de site het potje zelf aan door passende spelers per e-mail uit te nodigen.
+  // Standaard vult de site de partij zelf aan door passende spelers per e-mail uit te nodigen.
   const automatisch = b.automatisch !== false;
   const [p] = await db
     .insert(partijen)
@@ -227,14 +228,17 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
   const mij = await mijnSpeler(user);
   if (!mij) return fout("Sla eerst je vaste instellingen op.", 404);
   const id = Number(b.id);
-  if (!Number.isInteger(id)) return fout("Onbekend potje.");
+  if (!Number.isInteger(id)) return fout("Onbekende partij.");
   const [p] = await db.select().from(partijen).where(eq(partijen.id, id));
-  if (!p || dagenTussen(vandaag(), p.datum) < 0) return fout("Dit potje bestaat niet (meer).", 404);
+  if (!p || dagenTussen(vandaag(), p.datum) < 0) return fout("Deze partij bestaat niet (meer).", 404);
   if (actie === "aanmelden" || actie === "afmelden") {
     const r = await beantwoord(id, mij.id, actie === "aanmelden");
     return r.ok ? json({ ok: true, tekst: r.tekst }) : fout(r.fout, r.status);
+  } else if (actie === "geboekt" || actie === "nietgeboekt") {
+    if (p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de beheerder) kan dit aanpassen.", 403);
+    await db.update(partijen).set({ geboekt: actie === "geboekt" }).where(eq(partijen.id, id));
   } else if (actie === "verwijderen") {
-    if (p.aangemaaktDoor !== mij.id && !beheer) return fout("Alleen wie het potje heeft gepland (of de beheerder) kan het verwijderen.", 403);
+    if (p.aangemaaktDoor !== mij.id && !beheer) return fout("Alleen wie de partij heeft gepland (of de beheerder) kan deze verwijderen.", 403);
     await db.delete(partijen).where(eq(partijen.id, id));
   } else return fout("Niet gevonden.", 404);
   return json({ ok: true });
@@ -364,13 +368,13 @@ async function slaClubOp(req: Request, b: any) {
   return json({ ok: true });
 }
 
-// Uitnodiging uit de e-mail: de sleutel in de link bepaalt om welk potje en welke speler het gaat.
+// Uitnodiging uit de e-mail: de sleutel in de link bepaalt om welke partij en welke speler het gaat.
 async function antwoord(req: Request) {
   if (req.method === "GET") {
     const r = await zoekUitnodiging(new URL(req.url).searchParams.get("t") ?? "");
     if (!r) return fout("Deze link klopt niet (meer).", 404);
     const [p] = await db.select().from(partijen).where(eq(partijen.id, r.partijId));
-    if (!p) return fout("Dit potje bestaat niet meer.", 404);
+    if (!p) return fout("Deze partij bestaat niet meer.", 404);
     const rijen = await db.select().from(partijDeelnemers).where(eq(partijDeelnemers.partijId, p.id));
     const namen = new Map((await db.select({ id: spelers.id, naam: spelers.naam }).from(spelers)).map((x) => [x.id, x.naam]));
     const actief = spelendVan({ ...p, rijen });
@@ -416,7 +420,7 @@ export default async (req: Request) => {
     if (pad === "/api/beschikbaarheid" && schrijven) return await slaBeschikbaarheidOp(user, await leesBody(req));
     if (pad === "/api/partijen" && req.method === "GET") return (async () => { const beheer = isBeheer(req); return json({ partijen: await allePartijen(user, beheer), beheer }); })();
     if (pad === "/api/partijen" && req.method === "POST") return await maakPartij(user, await leesBody(req));
-    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen)$/.exec(pad);
+    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt)$/.exec(pad);
     if (m && req.method === "POST") return await wijzigPartij(user, m[1], await leesBody(req), isBeheer(req));
     return fout("Niet gevonden.", 404);
   } catch (e) {
