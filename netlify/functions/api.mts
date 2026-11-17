@@ -17,7 +17,15 @@ import { db } from "../../db/index.js";
 import { beantwoord, werkPartijBij, zoekUitnodiging, spelendVan, isActief } from "../../lib/automatisch.js";
 import { spelers, beschikbaarheid, clubGegevens, partijen, partijDeelnemers } from "../../db/schema.js";
 
-const NIVEAUS = ["n80", "n85", "n90", "n95"];
+const NIVEAUS = ["n70", "n75", "n80", "n85", "n90", "n95"];
+// Speelsterkte: 7.0 t/m 10.0 in stapjes van 0.1, opgeslagen als tekst met één decimaal (bv. "8.2").
+function leesNiveau(x: unknown): string | null {
+  const g = typeof x === "number" ? x : typeof x === "string" ? Number(x.replace(",", ".")) : NaN;
+  if (!Number.isFinite(g)) return null;
+  const t = Math.round(g * 10);
+  if (Math.abs(g * 10 - t) > 1e-6 || t < 70 || t > 100) return null;
+  return (t / 10).toFixed(1);
+}
 const DUREN = ["60", "90"];
 // Oude dagdelen worden omgezet naar tijden; nieuwe invoer is "UU:MM-UU:MM" (per half uur).
 const OUDE_SLOTS: Record<string, [number, number]> = { ochtend: [540, 720], middag: [720, 1020], avond1: [1020, 1140], avond2: [1140, 1320] };
@@ -226,7 +234,8 @@ async function slaProfielOp(user: Gebruiker, b: any) {
   if (naam.length < 1 || naam.length > 40) return fout("Naam is verplicht (max 40 tekens).");
   const key = slug(naam);
   if (!key) return fout("Ongeldige naam.");
-  if (!NIVEAUS.includes(b.niveau)) return fout("Kies je speelsterkte.");
+  const niveau = leesNiveau(b.niveau);
+  if (!niveau) return fout("Kies je speelsterkte (7,0 t/m 10,0).");
   if (!Array.isArray(b.wensNiveaus) || !b.wensNiveaus.length || !b.wensNiveaus.every((x: string) => NIVEAUS.includes(x)))
     return fout("Kies minstens één niveau waarmee je wilt spelen.");
   if (!Array.isArray(b.duren) || !b.duren.length || !b.duren.every((x: string) => DUREN.includes(x)))
@@ -243,7 +252,7 @@ async function slaProfielOp(user: Gebruiker, b: any) {
 
   const waarden = {
     naam,
-    niveau: b.niveau,
+    niveau,
     wensNiveaus: [...new Set<string>(b.wensNiveaus)],
     duren: [...new Set<string>(b.duren)],
     frequentie: b.frequentie,

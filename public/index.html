@@ -66,6 +66,11 @@
   .hint { color:var(--zacht); font-size:.88rem; margin:0 0 8px; }
   label.optie { display:inline-flex; align-items:center; gap:8px; margin:0 8px 8px 0; cursor:pointer; padding:6px 12px; border:1px solid var(--lijn); border-radius:99px; background:var(--veld); transition:border-color .15s, background .15s; }
   label.optie:hover { border-color:var(--accent); }
+  .niveau-schuif { display:flex; align-items:center; gap:14px; }
+  .niveau-baan { flex:1; max-width:420px; }
+  .niveau-baan input[type=range] { width:100%; margin:0; accent-color:var(--accent); cursor:pointer; }
+  .niveau-schuif output { min-width:3.2em; text-align:center; font-weight:700; font-size:1.2em; padding:4px 10px; border:1px solid var(--accent); border-radius:99px; background:var(--accent-zacht); }
+  .niveau-schaal { display:flex; justify-content:space-between; font-size:.8em; color:var(--zacht); }
   label.optie:has(input:checked) { border-color:var(--accent); background:var(--accent-zacht); }
   input[type=text], input[type=email], input[type=password], input[type=number], select {
     font:inherit; padding:10px 12px; border:1px solid var(--lijn); border-radius:10px; background:var(--veld); color:inherit; width:100%; max-width:320px;
@@ -248,7 +253,14 @@
           <input type="text" id="naam" maxlength="40" placeholder="Bijv. Sanne">
         </fieldset>
         <fieldset id="niveau-veld">
-          <legend>Speelsterkte: op welk niveau speel je ongeveer?</legend>
+          <legend><label for="niveau">Speelsterkte: op welk niveau speel je ongeveer?</label></legend>
+          <div class="niveau-schuif">
+            <div class="niveau-baan">
+              <input type="range" id="niveau" min="7" max="10" step="0.1" value="8">
+              <div class="niveau-schaal" aria-hidden="true"><span>7,0</span><span>8,0</span><span>9,0</span><span>10,0</span></div>
+            </div>
+            <output id="niveau-waarde" for="niveau">8,0</output>
+          </div>
         </fieldset>
         <fieldset id="wens-veld">
           <legend>Met welk niveau wil je spelen?</legend>
@@ -404,7 +416,8 @@
   function optie(type, name, value, label) {
     return h('label', { class: 'optie' }, h('input', { type, name, value }), label);
   }
-  P.NIVEAUS.forEach((n) => $('niveau-veld').append(optie('radio', 'niveau', n.id, n.label)));
+  const toonNiveau = () => ($('niveau-waarde').textContent = Number($('niveau').value).toFixed(1).replace('.', ','));
+  $('niveau').addEventListener('input', toonNiveau);
   P.NIVEAUS.forEach((n) => $('wens-veld').append(optie('checkbox', 'wens', n.id, n.label)));
   P.DUREN.forEach((d) => $('duur-veld').append(optie('checkbox', 'duur', d.id, d.label)));
   P.FREQUENTIES.forEach((f) => $('frequentie').append(h('option', { value: f.id }, f.label)));
@@ -418,7 +431,9 @@
 
   function vulProfiel(r) {
     $('naam').value = r ? r.naam : (gebruiker && gebruiker.name) || '';
-    document.querySelectorAll('input[name=niveau]').forEach((i) => (i.checked = !!r && i.value === r.niveau));
+    const g = r ? P.niveauGetal(r.niveau) : NaN;
+    $('niveau').value = Number.isFinite(g) ? g.toFixed(1) : '8.0';
+    toonNiveau();
     document.querySelectorAll('input[name=wens]').forEach((i) => (i.checked = !!r && r.wensNiveaus.includes(i.value)));
     document.querySelectorAll('input[name=duur]').forEach((i) => (i.checked = !!r && r.duren.includes(i.value)));
     $('frequentie').value = r ? r.frequentie : 'wanneer-het-lukt';
@@ -1088,7 +1103,7 @@
   $('profiel').addEventListener('submit', async (e) => {
     e.preventDefault();
     const naam = $('naam').value.trim();
-    const niveau = (document.querySelector('input[name=niveau]:checked') || {}).value;
+    const niveau = Number($('niveau').value).toFixed(1);
     const wensNiveaus = [...document.querySelectorAll('input[name=wens]:checked')].map((i) => i.value);
     const duren = [...document.querySelectorAll('input[name=duur]:checked')].map((i) => i.value);
     const clubVoorkeur = {};
