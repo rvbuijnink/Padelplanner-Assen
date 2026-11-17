@@ -32,6 +32,31 @@
     return typeof niveau === 'string' && /^\d{1,2}\.\d$/.test(niveau) && g >= NIVEAU_MIN && g <= NIVEAU_MAX;
   }
   const niveauLabel = (niveau) => niveauGetal(niveau).toFixed(1).replace('.', ',');
+  // Met welk niveau iemand wil spelen: een range van-tot, opgeslagen als ["8.0-9.2"].
+  // Oudere profielen hebben nog losse range-id's (bv. ['n80', 'n85']); die blijven werken.
+  const WENS = /^(\d{1,2}\.\d)-(\d{1,2}\.\d)$/;
+  function wensBereik(wens) {
+    const lijst = Array.isArray(wens) ? wens : [];
+    const m = lijst.length === 1 && WENS.exec(lijst[0]);
+    if (m) return [Number(m[1]), Number(m[2])];
+    const oud = lijst.map((id) => niveauGetal(id)).filter(Number.isFinite);
+    if (!oud.length) return null;
+    return [Math.min(...oud), Math.min(NIVEAU_MAX, Math.max(...oud) + 0.5)];
+  }
+  function geldigeWens(wens) {
+    if (!Array.isArray(wens) || wens.length !== 1) return false;
+    const m = WENS.exec(wens[0]);
+    return !!m && geldigNiveau(m[1]) && geldigNiveau(m[2]) && Number(m[1]) <= Number(m[2]);
+  }
+  // Wil iemand met deze wens spelen met iemand van dit niveau?
+  function wilMet(wens, niveau) {
+    const lijst = Array.isArray(wens) ? wens : [];
+    const m = lijst.length === 1 && WENS.exec(lijst[0]);
+    if (!m) return lijst.includes(rangeVan(niveau));
+    const t = Math.round(niveauGetal(niveau) * 10);
+    return t >= Math.round(Number(m[1]) * 10) && t <= Math.round(Number(m[2]) * 10);
+  }
+  const wensLabel = (wens) => { const b = wensBereik(wens); return b ? b.map((g) => g.toFixed(1).replace('.', ',')).join(' – ') : ''; };
   const DUREN = [
     { id: '60', label: '1 uur' },
     { id: '90', label: '1,5 uur' }
@@ -163,8 +188,8 @@
   function compatibel(a, b, clubs) {
     return (
       (!clubs || gedeeldeClub([a, b], clubs)) &&
-      a.wensNiveaus.includes(rangeVan(b.niveau)) &&
-      b.wensNiveaus.includes(rangeVan(a.niveau)) &&
+      wilMet(a.wensNiveaus, b.niveau) &&
+      wilMet(b.wensNiveaus, a.niveau) &&
       gemeenschappelijkeDuren(a, b).length > 0
     );
   }
@@ -324,7 +349,7 @@
   }
 
   return {
-    NIVEAUS, NIVEAU_MIN, NIVEAU_MAX, NIVEAU_STAP, niveauGetal, rangeVan, geldigNiveau, niveauLabel, DUREN, SLOTS, OUDE_SLOTS, DAG_VAN, DAG_TOT, STAP, VENSTER_DAGEN,
+    NIVEAUS, NIVEAU_MIN, NIVEAU_MAX, NIVEAU_STAP, niveauGetal, rangeVan, geldigNiveau, niveauLabel, wensBereik, geldigeWens, wilMet, wensLabel, DUREN, SLOTS, OUDE_SLOTS, DAG_VAN, DAG_TOT, STAP, VENSTER_DAGEN,
     naarMin, naarTijd, leesTijd, tijdId, tijdLabel, tijdenVan, normaliseer, vrijVanaf, WEKEN_ZICHTBAAR, DEADLINE_DAGEN, VOORKEUREN, FREQUENTIES,
     dagKey, parseKey, dagenTussen, volgendeDagen,
     maandagVan, weken, dagenVanWeek, deadline, weekStatus, beschikbaarVan, voorkeurVan, clubOk,
