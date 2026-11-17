@@ -130,8 +130,12 @@
   .sp-wacht { color:var(--fout); font-weight:600; font-size:.88rem; }
   .sp-open { color:var(--zacht); font-style:italic; }
   .kleuruitleg { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:.86rem; color:var(--zacht); margin:0 0 12px; }
-  .uitleg .stappen { margin:0 0 8px; padding-left:1.3em; }
-  .uitleg .stappen li { margin:0 0 6px; }
+  .uitleg .stappen { list-style:none; margin:0 0 10px; padding:0; }
+  .uitleg .stappen > li { display:flex; gap:8px; margin:0 0 8px; }
+  .uitleg .stappen .nr { flex:none; min-width:1.4em; font-weight:700; color:var(--accent); }
+  .uitleg .voorwaarden { margin:4px 0 4px; padding-left:1.2em; list-style:disc; }
+  .uitleg .voorwaarden li { margin:0 0 2px; }
+  .uitleg .kleuren { list-style:none; margin:0 0 10px; padding:0; display:grid; gap:3px; }
   .uitleg p { margin:0; }
 
   table.banen { width:100%; border-collapse:collapse; font-size:.92rem; }
@@ -360,15 +364,27 @@
       <h2>Geplande partijen</h2>
       <div class="uitleg">
         <ol class="stappen">
-          <li><strong>De site zoekt een match.</strong> De site plant een partij zodra aan al deze voorwaarden is voldaan: vier spelers kunnen op hetzelfde moment, hun niveau past bij elkaar, hun speelduur past bij elkaar, hun clubvoorkeur komt overeen en er is op die club een baan vrij. Is er geen baan vrij, dan wordt niemand uitgenodigd.</li>
-          <li><strong>Uitnodiging per e-mail.</strong> Zodra er een partij is gepland, krijgen de vier spelers een uitnodiging per e-mail.</li>
-          <li><strong>Bevestigen.</strong> Elke speler bevestigt of zegt af. Je hebt maximaal 24 uur om te reageren; is de partij eerder, dan de helft van de tijd tot de partij (minstens 2 uur). De uiterste tijd staat in de mail. Reageer je niet op tijd of zeg je af, dan komt de volgende speler die ook kan in jouw plaats.</li>
-          <li><strong>Alle vier deelnemers hebben bevestigd.</strong> Iedereen krijgt een mail dat de partij doorgaat, met de naam van degene die de baan boekt.</li>
-          <li><strong>De baan boeken.</strong> Die speler boekt de baan en plakt een Tikkie bij de partij. De anderen krijgen een mail dat de baan geboekt is, met de Tikkie in de mail. Wil de boeker geen Tikkie op de site zetten, dan gaat de mail toch.</li>
+          <li><span class="nr">1.</span><div><strong>De site zoekt een match.</strong> De site plant een partij zodra aan al deze voorwaarden is voldaan:
+            <ul class="voorwaarden">
+              <li>Vier spelers kunnen op hetzelfde moment.</li>
+              <li>Hun niveau past bij elkaar.</li>
+              <li>Hun speelduur past bij elkaar.</li>
+              <li>Hun clubvoorkeur komt overeen.</li>
+              <li>Er is op die club een baan vrij.</li>
+            </ul>
+            Is er geen baan vrij, dan wordt niemand uitgenodigd.</div></li>
+          <li><span class="nr">2.</span><div><strong>Uitnodiging per e-mail.</strong> Zodra er een partij is gepland, krijgen de vier spelers een uitnodiging per e-mail.</div></li>
+          <li><span class="nr">3.</span><div><strong>Bevestigen.</strong> Elke speler bevestigt of zegt af. Reageer je niet op tijd of zeg je af, dan komt de volgende speler die ook kan in jouw plaats. Je hebt maximaal 24 uur om te reageren; is de partij eerder, dan de helft van de tijd tot de partij (minstens 2 uur). De uiterste tijd staat in de mail.</div></li>
+          <li><span class="nr">4.</span><div><strong>Alle vier deelnemers hebben bevestigd.</strong> Iedereen krijgt een mail dat de partij doorgaat, met de naam van degene die de baan boekt.</div></li>
+          <li><span class="nr">5.</span><div><strong>De baan boeken.</strong> Die speler boekt de baan en plakt een Tikkie bij de partij. De anderen krijgen een mail dat de baan geboekt is, met de Tikkie in de mail. Wil de boeker geen Tikkie op de site zetten, dan gaat de mail toch.</div></li>
         </ol>
+        <ul class="kleuren" aria-label="Kleuren">
+          <li>🔴 <strong>Rood:</strong> vier spelers kunnen, maar moeten nog bevestigen.</li>
+          <li>🟠 <strong>Oranje:</strong> gepland, baan moet nog geboekt worden.</li>
+          <li>🟢 <strong>Groen:</strong> baan geboekt.</li>
+        </ul>
         <p>Je ziet hier alleen de partijen waar je zelf bij hoort; de beheerder ziet alle partijen.</p>
       </div>
-      <div class="kleuruitleg" aria-label="Kleuren"><span style="--k:color-mix(in srgb, var(--fout) 55%, var(--card))">🔴 Rood: vier spelers kunnen, maar moeten nog bevestigen</span><span style="--k:#f0a35e">🟠 Oranje: gepland, baan moet nog geboekt worden</span><span style="--k:color-mix(in srgb, var(--goed) 60%, var(--card))">🟢 Groen: baan geboekt</span></div>
       <p class="melding" id="partijen-info" role="status"></p>
       <div id="partijen"></div>
       <button type="button" class="rustig" id="ververs">Vernieuw</button>
