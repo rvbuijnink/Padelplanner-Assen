@@ -67,6 +67,8 @@
   .hint { color:var(--zacht); font-size:.88rem; margin:0 0 8px; }
   label.optie { display:inline-flex; align-items:center; gap:8px; margin:0 8px 8px 0; cursor:pointer; padding:6px 12px; border:1px solid var(--lijn); border-radius:99px; background:var(--veld); transition:border-color .15s, background .15s; }
   label.optie:hover { border-color:var(--accent); }
+  label.onthouden { display:inline-flex; align-items:center; gap:8px; margin-top:12px; cursor:pointer; font-size:.92rem; }
+  label.onthouden input { width:18px; height:18px; margin:0; accent-color:var(--accent); }
   .niveau-schuif { display:flex; align-items:center; gap:14px; }
   .niveau-baan { flex:1; max-width:420px; }
   /* Enkele schuifbalk (eigen niveau) met padelbal */
@@ -252,6 +254,7 @@
             <input type="password" id="wachtwoord" required minlength="6" autocomplete="current-password">
           </div>
         </div>
+        <label class="onthouden"><input type="checkbox" id="ingelogd-blijven" checked> Ingelogd blijven</label>
         <div class="knoppen">
           <button type="submit" id="login-knop">Inloggen</button>
           <button type="button" class="link" id="vergeten">Wachtwoord vergeten?</button>
@@ -812,7 +815,7 @@
     d.status === 'uitgenodigd' ? h('span', { class: 'hint' }, ' (uitgenodigd)') : null]);
   function toonPartijen() {
     const box = $('partijen');
-    if (!partijen.length) { box.replaceChildren(h('p', { class: 'hint' }, isBeheerder ? 'Er zijn nog geen partijs gepland. Zodra vier spelers op hetzelfde moment kunnen, plant de site er een en krijgen zij een mail.' : 'Je hebt nog geen geplande partijen. Zodra jij en drie passende spelers op hetzelfde moment kunnen, plant de site er een en krijg je een mail.')); return; }
+    if (!partijen.length) { box.replaceChildren(h('p', { class: 'hint' }, isBeheerder ? 'Er zijn nog geen partijen gepland. Zodra vier spelers op hetzelfde moment kunnen, plant de site er een en krijgen zij een mail.' : 'Je hebt nog geen geplande partijen. Zodra jij en drie passende spelers op hetzelfde moment kunnen, plant de site er een en krijg je een mail.')); return; }
     // Eerst de partijen waarvoor je bent uitgenodigd, dan die waar je meedoet, dan de rest.
     const volgorde = (p) => (p.mijnStatus === 'uitgenodigd' ? 0 : p.doeIkMee ? 1 : 2);
     box.replaceChildren(...partijen.slice().sort((a, b) => volgorde(a) - volgorde(b)).map((p) => {
@@ -1161,10 +1164,20 @@
     toonAuth();
   }
 
+  // "Ingelogd blijven": de sessie staat standaard in localStorage en blijft dus bewaard.
+  // Zonder vinkje onthouden we dat, en zetten we een sessiecookie die verdwijnt als de browser sluit.
+  function blijfIngelogd() { try { return localStorage.getItem('pp_ingelogd_blijven') !== '0'; } catch (e) { return true; } }
+  function onthoudKeuze(blijven) {
+    try { localStorage.setItem('pp_ingelogd_blijven', blijven ? '1' : '0'); } catch (e) {}
+    document.cookie = 'pp_sessie=1; path=/; SameSite=Lax';
+  }
+  $('ingelogd-blijven').checked = blijfIngelogd();
+
   $('login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!Auth) { meld('login-melding', 'Inloggen werkt alleen op de Netlify-site.', 'fout'); return; }
     const email = $('email').value.trim(), ww = $('wachtwoord').value;
+    onthoudKeuze($('ingelogd-blijven').checked);
     try {
       if (modus === 'signup') {
         const naam = $('signup-naam').value.trim();
@@ -1283,6 +1296,10 @@
       if (cb && cb.type === 'invite') { inviteToken = cb.token; toonAuth(); vraagNieuwWachtwoord('Je bent uitgenodigd. Kies een wachtwoord om je account te activeren.'); return; }
       if (cb && cb.type === 'confirmation') meld('login-melding', 'Je e-mailadres is bevestigd.', 'ok');
     } catch (err) { meld('login-melding', authFout(err), 'fout'); }
+  }
+  // Koos iemand niet voor "Ingelogd blijven" en is de browser sindsdien gesloten? Dan uitloggen.
+  if (Auth && !blijfIngelogd() && !document.cookie.split('; ').includes('pp_sessie=1')) {
+    try { await Auth.logout(); } catch (e) {}
   }
   const u = Auth ? await Auth.getUser() : null;
   if (u) await naIngelogd(u);
