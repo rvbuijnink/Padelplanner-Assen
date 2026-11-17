@@ -44,3 +44,28 @@ export const clubGegevens = pgTable("club_gegevens", {
   opmerking: text().notNull().default(""),
   bijgewerkt: timestamp("bijgewerkt", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Geplande potjes: een speler zet een moment en club vast, anderen geven zich op.
+export const partijen = pgTable("partijen", {
+  id: serial().primaryKey(),
+  datum: date().notNull(),
+  // starttijd "UU:MM"
+  tijd: text().notNull(),
+  // speelduur in minuten: 60 of 90
+  duur: integer().notNull(),
+  clubId: text("club_id").notNull(),
+  opmerking: text().notNull().default(""),
+  aangemaaktDoor: integer("aangemaakt_door").references(() => spelers.id, { onDelete: "set null" }),
+  aangemaakt: timestamp("aangemaakt", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Wie zich voor een potje heeft opgegeven. De eerste vier spelen, de rest is reserve.
+export const partijDeelnemers = pgTable(
+  "partij_deelnemers",
+  {
+    partijId: integer("partij_id").notNull().references(() => partijen.id, { onDelete: "cascade" }),
+    spelerId: integer("speler_id").notNull().references(() => spelers.id, { onDelete: "cascade" }),
+    aangemeld: timestamp("aangemeld", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.partijId, t.spelerId] })]
+);
