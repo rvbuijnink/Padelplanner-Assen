@@ -353,14 +353,14 @@
     </section>
 
     <section>
-      <h2>Banen en prijzen per tijdstip</h2>
+      <h2>Banen en tijden per tijdstip</h2>
       <div class="rij">
         <div><label for="kies-dag"><strong>Dag</strong></label><select id="kies-dag"></select></div>
         <div><label for="kies-van"><strong>Van</strong></label><select id="kies-van"></select></div>
         <div><label for="kies-tot"><strong>Tot</strong></label><select id="kies-tot"></select></div>
       </div>
       <div class="scroll"><table class="banen" id="banen"></table></div>
-      <p class="hint">Prijs per baan en per persoon (4 spelers). Doordeweeks geldt bij een starttijd vóór 17:00 het daltarief als de club dat heeft. De goedkoopste boekbare club is gemarkeerd.</p>
+      <p class="hint">De goedkoopste boekbare club is gemarkeerd.</p>
       <p><a class="knop rustig" id="padelchecker" target="_blank" rel="noopener">Vergelijk vrije banen op Padelchecker ↗</a></p>
     </section>
   </div>
@@ -984,16 +984,13 @@
     const pp = (x) => (x.lv ? (x.lv.tijden ? x.lv.tijden[0].prijs / 4 : null) : x.st.soort === 'boekbaar' && x.p ? x.p.perPersoon : null);
     const kandidaten = rijen.filter((x) => pp(x) != null && x.v !== 'niet');
     const min = kandidaten.length ? Math.min(...kandidaten.map(pp)) : null;
-    const vLabel = (v) => (P.VOORKEUREN.find((x) => x.id === v) || {}).label;
     $('banen').replaceChildren(
-      h('thead', {}, h('tr', {}, h('th', {}, 'Club'), h('th', {}, 'Jouw voorkeur'), h('th', {}, 'Beschikbaarheid'), h('th', {}, 'Prijs'))),
+      h('thead', {}, h('tr', {}, h('th', {}, 'Club'), h('th', {}, 'Beschikbaarheid'))),
       h('tbody', {}, rijen.map((x) => {
         const goedkoopst = min != null && kandidaten.includes(x) && pp(x) === min;
         return h('tr', { class: goedkoopst ? 'goedkoopst' : '' },
           h('td', {}, h('a', { href: x.c.boeken, target: '_blank', rel: 'noopener' }, x.c.naam), goedkoopst ? h('span', { class: 'badge' }, 'goedkoopst') : null),
-          h('td', { class: x.v === 'niet' ? 'st-te-laat' : '' }, x.v ? vLabel(x.v) : '–'),
-          h('td', {}, x.lv ? liveRegel(x.c, x.lv, dag) : [statusTekst(x.c, x.st), h('div', { class: 'boekrij' }, boekKnop(x.c, x.st))]),
-          h('td', {}, x.lv ? (x.lv.tijden ? 'live, zie tijden' : '–') : prijsTekst(x.c, dag, slot)));
+          h('td', {}, x.lv ? liveRegel(x.c, x.lv, dag) : [statusTekst(x.c, x.st), h('div', { class: 'boekrij' }, boekKnop(x.c, x.st))]));
       })));
   }
 
