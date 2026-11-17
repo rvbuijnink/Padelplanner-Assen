@@ -4,11 +4,34 @@
   else root.Planner = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   const NIVEAUS = [
+    { id: 'n70', label: '7 – 7,5' },
+    { id: 'n75', label: '7,5 – 8' },
     { id: 'n80', label: '8 – 8,5' },
     { id: 'n85', label: '8,5 – 9' },
     { id: 'n90', label: '9 – 9,5' },
     { id: 'n95', label: '9,5 – 10' }
   ];
+  // Speelsterkte is een getal van 7,0 t/m 10,0 in stapjes van 0,1 (opgeslagen als "8.2").
+  // Oudere profielen hebben nog een range-id (bv. 'n80'); die blijven werken.
+  const NIVEAU_MIN = 7, NIVEAU_MAX = 10, NIVEAU_STAP = 0.1;
+  function niveauGetal(niveau) {
+    const oud = /^n(\d{2})$/.exec(niveau || '');
+    if (oud) return Number(oud[1]) / 10;
+    const g = Number(niveau);
+    return Number.isFinite(g) ? g : NaN;
+  }
+  // Bij welke range (id) hoort een speelsterkte? 8,5 valt in '8,5 – 9'; 10,0 valt in '9,5 – 10'.
+  function rangeVan(niveau) {
+    const t = Math.round(niveauGetal(niveau) * 10);
+    if (!Number.isFinite(t)) return null;
+    const b = Math.min(95, Math.max(70, Math.floor(t / 5) * 5));
+    return 'n' + b;
+  }
+  function geldigNiveau(niveau) {
+    const g = Number(niveau);
+    return typeof niveau === 'string' && /^\d{1,2}\.\d$/.test(niveau) && g >= NIVEAU_MIN && g <= NIVEAU_MAX;
+  }
+  const niveauLabel = (niveau) => niveauGetal(niveau).toFixed(1).replace('.', ',');
   const DUREN = [
     { id: '60', label: '1 uur' },
     { id: '90', label: '1,5 uur' }
@@ -140,8 +163,8 @@
   function compatibel(a, b, clubs) {
     return (
       (!clubs || gedeeldeClub([a, b], clubs)) &&
-      a.wensNiveaus.includes(b.niveau) &&
-      b.wensNiveaus.includes(a.niveau) &&
+      a.wensNiveaus.includes(rangeVan(b.niveau)) &&
+      b.wensNiveaus.includes(rangeVan(a.niveau)) &&
       gemeenschappelijkeDuren(a, b).length > 0
     );
   }
@@ -301,7 +324,7 @@
   }
 
   return {
-    NIVEAUS, DUREN, SLOTS, OUDE_SLOTS, DAG_VAN, DAG_TOT, STAP, VENSTER_DAGEN,
+    NIVEAUS, NIVEAU_MIN, NIVEAU_MAX, NIVEAU_STAP, niveauGetal, rangeVan, geldigNiveau, niveauLabel, DUREN, SLOTS, OUDE_SLOTS, DAG_VAN, DAG_TOT, STAP, VENSTER_DAGEN,
     naarMin, naarTijd, leesTijd, tijdId, tijdLabel, tijdenVan, normaliseer, vrijVanaf, WEKEN_ZICHTBAAR, DEADLINE_DAGEN, VOORKEUREN, FREQUENTIES,
     dagKey, parseKey, dagenTussen, volgendeDagen,
     maandagVan, weken, dagenVanWeek, deadline, weekStatus, beschikbaarVan, voorkeurVan, clubOk,
