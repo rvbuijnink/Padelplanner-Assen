@@ -304,7 +304,7 @@
         </fieldset>
         <fieldset>
           <legend>Baanvoorkeur: waar wil je wel of niet spelen?</legend>
-          <p class="hint">Bij "Niet" plant de planner je nooit bij die club in.</p>
+          <p class="hint">Bij "Niet" plant de planner je nooit bij die club in. Bij buitenbanen kun je ook "Alleen lente en zomer" kiezen: dan telt die club alleen van 21 maart t/m 22 september mee.</p>
           <div class="scroll"><table class="voorkeur" id="voorkeur"></table></div>
         </fieldset>
         <fieldset>
@@ -482,8 +482,9 @@
   function bouwVoorkeur() {
     $('voorkeur').replaceChildren(
       h('thead', {}, h('tr', {}, h('th', {}, 'Club'), P.VOORKEUREN.map((v) => h('th', {}, v.label)))),
-      h('tbody', {}, clubs.map((c) => h('tr', {}, h('td', {}, c.naam),
-        P.VOORKEUREN.map((v) => h('td', {}, h('input', { type: 'radio', name: 'club-' + c.id, value: v.id, checked: v.id === 'wel', 'aria-label': c.naam + ': ' + v.label })))))));
+      h('tbody', {}, clubs.map((c) => h('tr', {}, h('td', {}, c.naam, c.type === 'outdoor' ? h('div', { class: 'hint' }, 'buitenbanen') : null),
+        P.VOORKEUREN.map((v) => h('td', {}, v.alleenBuiten && c.type !== 'outdoor' ? h('span', { class: 'hint', 'aria-hidden': 'true' }, '–')
+          : h('input', { type: 'radio', name: 'club-' + c.id, value: v.id, checked: v.id === 'wel', 'aria-label': c.naam + ': ' + v.label })))))));
   }
 
   function vulProfiel(r) {
@@ -980,7 +981,7 @@
     const live = clubs.some((c) => c.live) ? await haalLive(dag, slot) : null;
     if (run !== banenRun) return;
     const duren = r ? r.duren : ['90', '60'];
-    const rijen = clubs.map((c) => ({ c, st: P.status(c, dag, slot, today), p: P.prijs(c, 60, dag, slot), v: r ? P.voorkeurVan(r, c.id) : null, lv: c.live ? liveVoor(live, c, duren, slot) : null }));
+    const rijen = clubs.map((c) => ({ c, st: P.status(c, dag, slot, today), p: P.prijs(c, 60, dag, slot), v: r ? P.voorkeurVan(r, c.id, dag) : null, lv: c.live ? liveVoor(live, c, duren, slot) : null }));
     const pp = (x) => (x.lv ? (x.lv.tijden ? x.lv.tijden[0].prijs / 4 : null) : x.st.soort === 'boekbaar' && x.p ? x.p.perPersoon : null);
     const kandidaten = rijen.filter((x) => pp(x) != null && x.v !== 'niet');
     const min = kandidaten.length ? Math.min(...kandidaten.map(pp)) : null;
@@ -989,7 +990,7 @@
       h('tbody', {}, rijen.map((x) => {
         const goedkoopst = min != null && kandidaten.includes(x) && pp(x) === min;
         return h('tr', { class: goedkoopst ? 'goedkoopst' : '' },
-          h('td', {}, h('a', { href: x.c.boeken, target: '_blank', rel: 'noopener' }, x.c.naam), goedkoopst ? h('span', { class: 'badge' }, 'goedkoopst') : null),
+          h('td', {}, h('a', { href: x.c.boeken, target: '_blank', rel: 'noopener' }, x.c.naam), goedkoopst ? h('span', { class: 'badge' }, 'goedkoopst') : null, x.c.type === 'outdoor' ? h('div', { class: 'hint' }, 'buitenbanen') : null),
           h('td', {}, x.lv ? liveRegel(x.c, x.lv, dag) : [statusTekst(x.c, x.st), h('div', { class: 'boekrij' }, boekKnop(x.c, x.st))]));
       })));
   }

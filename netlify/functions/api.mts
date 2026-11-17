@@ -61,8 +61,10 @@ function leesTijden(lijst: unknown[]): string[] | null {
   return out.map(([a, b]) => hhmm(a) + "-" + hhmm(b));
 }
 const FREQ = ["wanneer-het-lukt", "tweewekelijks", "wekelijks", "2x-per-week"];
-const CLUBS = ["peakz", "valley", "plaza", "rolde"];
-const VOORKEUR = ["wel", "niet"];
+const CLUBS = ["peakz", "valley", "plaza", "rolde", "hertenkamp"];
+// "zomer" (alleen lente en zomer) kan alleen bij buitenbanen.
+const BUITEN = ["hertenkamp"];
+const VOORKEUR = ["wel", "zomer", "niet"];
 const MAX_WEKEN_VOORUIT = 6;
 
 const json = (data: unknown, status = 200) =>
@@ -254,7 +256,7 @@ async function slaProfielOp(user: Gebruiker, b: any) {
   const clubVoorkeur: Record<string, string> = {};
   for (const c of CLUBS) {
     const v = b.clubVoorkeur?.[c] ?? "wel";
-    if (!VOORKEUR.includes(v)) return fout("Ongeldige baanvoorkeur.");
+    if (!VOORKEUR.includes(v) || (v === "zomer" && !BUITEN.includes(c))) return fout("Ongeldige baanvoorkeur.");
     clubVoorkeur[c] = v;
   }
   if (CLUBS.every((c) => clubVoorkeur[c] === "niet")) return fout("Kies minstens één club waar je wel wilt spelen.");

@@ -120,7 +120,7 @@ function heeftRuimte(ctx: Context, s: Speler, datum: string, behalve?: number) {
 }
 
 function pastBij(ctx: Context, s: Speler, p: { id?: number; datum: string; tijd: string; duur: number; clubId: string }, groep: Speler[]) {
-  if (P.voorkeurVan(s, p.clubId) === "niet") return false;
+  if (P.voorkeurVan(s, p.clubId, p.datum) === "niet") return false;
   if (!kanOp(s, p.datum, p.tijd, p.duur)) return false;
   if (!groep.every((g) => nivPast(s, g))) return false;
   if (!heeftRuimte(ctx, s, p.datum, p.id)) return false;
