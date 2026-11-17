@@ -54,10 +54,10 @@ const dagTekst = (datum: string) =>
 const momentTekst = (ms: number) =>
   new Date(ms).toLocaleString("nl-NL", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Amsterdam" });
 
-// Uiterste moment om te reageren: de helft van de tijd tot de partij, minstens 2 en hooguit 24 uur.
+// Uiterste moment om te reageren: de helft van de tijd tot de partij, minstens 2 en hooguit 12 uur.
 export function verlooptOp(uitgenodigd: Date, partij: { datum: string; tijd: string }) {
   const start = nlMoment(partij.datum, partij.tijd);
-  const marge = Math.min(24 * UUR, Math.max(2 * UUR, (start - uitgenodigd.getTime()) / 2));
+  const marge = Math.min(12 * UUR, Math.max(2 * UUR, (start - uitgenodigd.getTime()) / 2));
   return uitgenodigd.getTime() + marge;
 }
 
