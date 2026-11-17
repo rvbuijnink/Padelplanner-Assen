@@ -1,4 +1,4 @@
-/* Planner-logica: werkt in de browser (window.Planner) en in Node (require). */
+/* Planner-logica: gedeeld door de browser (gebundeld naar public/planner.js als window.Planner) en de server. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.Planner = factory();
