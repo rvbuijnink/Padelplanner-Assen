@@ -1,0 +1,874 @@
+{
+  "version": "8",
+  "dialect": "postgres",
+  "id": "c70c58aa-76c8-450c-9818-e0329c3ace26",
+  "prevIds": [
+    "f527cda7-8aa3-4781-94bf-e6e432ac60e0"
+  ],
+  "ddl": [
+    {
+      "isRlsEnabled": false,
+      "name": "beschikbaarheid",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "club_gegevens",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "partij_deelnemers",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "partijen",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "spelers",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "speler_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "beschikbaarheid"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "week",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "beschikbaarheid"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "tijdvakken",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "beschikbaarheid"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "bijgewerkt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "beschikbaarheid"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "club_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "club_gegevens"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "prijs_60",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "club_gegevens"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "prijs_90",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "club_gegevens"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "dal_prijs_60",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "club_gegevens"
+    },
+    {
+      "type": "double precision",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "dal_prijs_90",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "club_gegevens"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "horizon_dagen",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "club_gegevens"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "horizon_bevestigd",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "club_gegevens"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "opent_om",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "club_gegevens"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "''",
+      "generated": null,
+      "identity": null,
+      "name": "opmerking",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "club_gegevens"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "bijgewerkt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "club_gegevens"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "partij_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partij_deelnemers"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "speler_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partij_deelnemers"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "aangemeld",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partij_deelnemers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'bevestigd'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partij_deelnemers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "token",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partij_deelnemers"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "uitgenodigd",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partij_deelnemers"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "herinnerd",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partij_deelnemers"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "betaald",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partij_deelnemers"
+    },
+    {
+      "type": "serial",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "datum",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "tijd",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "duur",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "club_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "''",
+      "generated": null,
+      "identity": null,
+      "name": "opmerking",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "aangemaakt_door",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "automatisch",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "boeker_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "compleet_gemeld",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "geboekt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "betaallink",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "dag_herinnerd",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "aangemaakt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "type": "serial",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "slug",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "naam",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "niveau",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "wens_niveaus",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "duren",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "frequentie",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "rust_dagen",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "club_voorkeur",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "email",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "true",
+      "generated": null,
+      "identity": null,
+      "name": "mail_aan",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "true",
+      "generated": null,
+      "identity": null,
+      "name": "herinnering_aan",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "standaard_week",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "bijgewerkt",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "spelers"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "speler_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "spelers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "beschikbaarheid_speler_id_spelers_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "beschikbaarheid"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "partij_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "partijen",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "partij_deelnemers_partij_id_partijen_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "partij_deelnemers"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "speler_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "spelers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "partij_deelnemers_speler_id_spelers_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "partij_deelnemers"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "aangemaakt_door"
+      ],
+      "schemaTo": "public",
+      "tableTo": "spelers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "partijen_aangemaakt_door_spelers_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "boeker_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "spelers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "partijen_boeker_id_spelers_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "partijen"
+    },
+    {
+      "columns": [
+        "speler_id",
+        "week"
+      ],
+      "nameExplicit": false,
+      "name": "beschikbaarheid_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "beschikbaarheid"
+    },
+    {
+      "columns": [
+        "partij_id",
+        "speler_id"
+      ],
+      "nameExplicit": false,
+      "name": "partij_deelnemers_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "partij_deelnemers"
+    },
+    {
+      "columns": [
+        "club_id"
+      ],
+      "nameExplicit": false,
+      "name": "club_gegevens_pkey",
+      "schema": "public",
+      "table": "club_gegevens",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "partijen_pkey",
+      "schema": "public",
+      "table": "partijen",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "spelers_pkey",
+      "schema": "public",
+      "table": "spelers",
+      "entityType": "pks"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "token"
+      ],
+      "nullsNotDistinct": false,
+      "name": "partij_deelnemers_token_key",
+      "schema": "public",
+      "table": "partij_deelnemers",
+      "entityType": "uniques"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "slug"
+      ],
+      "nullsNotDistinct": false,
+      "name": "spelers_slug_key",
+      "schema": "public",
+      "table": "spelers",
+      "entityType": "uniques"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "user_id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "spelers_user_id_key",
+      "schema": "public",
+      "table": "spelers",
+      "entityType": "uniques"
+    }
+  ],
+  "renames": []
+}

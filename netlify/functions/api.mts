@@ -13,10 +13,14 @@
 // POST /api/partijen/betaald | /nietbetaald { id, spelerId } -> bijhouden wie zijn deel heeft betaald
 // GET  /api/antwoord?t=...   -> gegevens van een uitnodiging uit de e-mail (geen inlog nodig, de sleutel is genoeg)
 // POST /api/antwoord         { t, a: "ja" | "nee" } -> uitnodiging beantwoorden
+// GET  /api/agenda?t=...     -> agenda-afspraak (.ics) van een partij, via de sleutel uit de e-mail
 import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { getUser, verifyRequestOrigin, AuthError } from "@netlify/identity";
 import { db } from "../../db/index.js";
-import { beantwoord, meldGeboekt, zoekUitnodiging, spelendVan, isActief } from "../../lib/automatisch.js";
+import { beantwoord, meldGeboekt, zoekUitnodiging, spelendVan, isActief, agendaVoor } from "../../lib/automatisch.js";
+// @ts-ignore - gedeelde planner-logica (CommonJS)
+import Planner from "../../src/planner.cjs";
+const P: any = Planner;
 import { spelers, beschikbaarheid, clubGegevens, partijen, partijDeelnemers } from "../../db/schema.js";
 
 // Met welk niveau je wilt spelen: één range van-tot, opgeslagen als ["8.0-9.2"].
@@ -88,6 +92,21 @@ const dagenTussen = (a: string, b: string) => Math.round((utc(b) - utc(a)) / 864
 const vandaag = () => new Date(Date.now() + 1 * 3600000).toISOString().slice(0, 10); // ruwweg Nederlandse tijd
 const plusDagen = (k: string, n: number) => new Date(utc(k) + n * 86400000).toISOString().slice(0, 10);
 const isMaandag = (k: string) => new Date(utc(k)).getUTCDay() === 1;
+const maandagVan = (k: string) => plusDagen(k, -((new Date(utc(k)).getUTCDay() + 6) % 7));
+
+// Standaardweek: { "0".."6": ["UU:MM-UU:MM", ...] } (0 = maandag). null of leeg = geen standaardweek.
+function leesStandaardweek(x: unknown): Record<string, string[]> | null | undefined {
+  if (x === null || x === undefined) return null;
+  if (typeof x !== "object" || Array.isArray(x)) return undefined;
+  const out: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries(x as Record<string, unknown>)) {
+    if (!/^[0-6]$/.test(k) || !Array.isArray(v) || v.length > 12) return undefined;
+    const t = leesTijden(v);
+    if (!t) return undefined;
+    if (t.length) out[k] = t;
+  }
+  return Object.keys(out).length ? out : null;
+}
 
 async function leesBody(req: Request) {
   const text = await req.text();
@@ -128,6 +147,9 @@ async function alleSpelers(user: Gebruiker, beheer: boolean) {
       // Beschikbaarheid van anderen alleen voor de beheerder (voor "Beste momenten"); de site plant verder zelf.
       else if (beheer && Object.keys(w.tijdvakken).length) perWeek[w.week] = { tijdvakken: w.tijdvakken };
     }
+    // Voor de beheerder (Beste momenten) telt de standaardweek van anderen mee in de weken die ze niet zelf invulden.
+    const komend = Array.from({ length: MAX_WEKEN_VOORUIT + 1 }, (_, i) => plusDagen(vanaf, 7 + 7 * i)).map(maandagVan);
+    const weken2 = !isIk && beheer && s.standaardWeek ? P.vulStandaardweek(perWeek, s.standaardWeek, komend.filter((w) => !eigen.some((x) => x.week === w))) : perWeek;
     return {
       eigen: isIk,
       naam: s.naam,
@@ -137,9 +159,9 @@ async function alleSpelers(user: Gebruiker, beheer: boolean) {
       frequentie: s.frequentie,
       rustDagen: s.rustDagen,
       clubVoorkeur: s.clubVoorkeur,
-      ...(isIk ? { mailAan: s.mailAan, email: s.email } : {}),
+      ...(isIk ? { mailAan: s.mailAan, herinneringAan: s.herinneringAan, standaardWeek: s.standaardWeek ?? null, email: s.email } : {}),
       bijgewerkt: s.bijgewerkt.toISOString(),
-      weken: perWeek,
+      weken: weken2,
     };
   });
 }
@@ -270,6 +292,10 @@ async function slaProfielOp(user: Gebruiker, b: any) {
   if (!FREQ.includes(b.frequentie)) return fout("Kies hoe vaak je wilt spelen.");
   const rustDagen = b.rustDagen === undefined ? 0 : Number(b.rustDagen);
   if (![0, 1, 2].includes(rustDagen)) return fout("Kies hoeveel tijd je minimaal wilt tussen twee partijen.");
+  // Standaardweek en herinneringen zijn optioneel: niet meegestuurd = niet aanpassen.
+  const metStandaard = "standaardWeek" in b;
+  const standaardWeek = metStandaard ? leesStandaardweek(b.standaardWeek) : null;
+  if (standaardWeek === undefined) return fout("Ongeldige standaardweek.");
 
   const clubVoorkeur: Record<string, string> = {};
   for (const c of CLUBS) {
@@ -289,6 +315,8 @@ async function slaProfielOp(user: Gebruiker, b: any) {
     clubVoorkeur,
     email: user.email ?? null,
     mailAan: b.mailAan !== false,
+    ...(typeof b.herinneringAan === "boolean" ? { herinneringAan: b.herinneringAan } : {}),
+    ...(metStandaard ? { standaardWeek } : {}),
     bijgewerkt: new Date(),
   };
   const mij = await mijnSpeler(user);
@@ -383,6 +411,27 @@ async function slaClubOp(req: Request, b: any) {
   return json({ ok: true });
 }
 
+// Alleen de standaardweek opslaan (vanaf het tabblad Beschikbaarheid).
+async function slaStandaardweekOp(user: Gebruiker, b: any) {
+  const mij = await mijnSpeler(user);
+  if (!mij) return fout("Sla eerst je vaste instellingen op.", 404);
+  const standaardWeek = leesStandaardweek(b.standaardWeek);
+  if (standaardWeek === undefined) return fout("Ongeldige standaardweek.");
+  await db.update(spelers).set({ standaardWeek }).where(eq(spelers.id, mij.id));
+  return json({ ok: true });
+}
+
+// Agenda-afspraak via de link in de e-mail.
+async function agenda(req: Request) {
+  const r = await zoekUitnodiging(new URL(req.url).searchParams.get("t") ?? "");
+  if (!r) return fout("Deze link klopt niet (meer).", 404);
+  const ics = await agendaVoor(r.partijId, r.spelerId);
+  if (!ics) return fout("Je doet niet (meer) mee aan deze partij.", 404);
+  return new Response(ics, {
+    headers: { "content-type": "text/calendar; charset=utf-8", "content-disposition": 'attachment; filename="padel.ics"', "cache-control": "no-store" },
+  });
+}
+
 // Uitnodiging uit de e-mail: de sleutel in de link bepaalt om welke partij en welke speler het gaat.
 async function antwoord(req: Request) {
   if (req.method === "GET") {
@@ -418,6 +467,7 @@ export default async (req: Request) => {
     if (pad === "/api/clubs" && (req.method === "PUT" || req.method === "POST")) return await slaClubOp(req, await leesBody(req));
     if (pad === "/api/overzicht" && req.method === "GET") return await overzicht(req);
     if (pad === "/api/antwoord" && (req.method === "GET" || req.method === "POST")) return await antwoord(req);
+    if (pad === "/api/agenda" && req.method === "GET") return await agenda(req);
 
     // Alles hieronder alleen voor ingelogde spelers.
     const user = await getUser();
@@ -433,6 +483,7 @@ export default async (req: Request) => {
     }
     if (pad === "/api/profiel" && schrijven) return await slaProfielOp(user, await leesBody(req));
     if (pad === "/api/beschikbaarheid" && schrijven) return await slaBeschikbaarheidOp(user, await leesBody(req));
+    if (pad === "/api/standaardweek" && schrijven) return await slaStandaardweekOp(user, await leesBody(req));
     if (pad === "/api/partijen" && req.method === "GET") return (async () => { const beheer = isBeheer(req); return json({ partijen: await allePartijen(user, beheer), beheer }); })();
     const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|betaald|nietbetaald)$/.exec(pad);
     if (m && req.method === "POST") return await wijzigPartij(user, m[1], await leesBody(req), isBeheer(req));
@@ -446,4 +497,4 @@ export default async (req: Request) => {
   }
 };
 
-export const config = { path: ["/api/spelers", "/api/profiel", "/api/beschikbaarheid", "/api/clubs", "/api/overzicht", "/api/partijen", "/api/partijen/*", "/api/antwoord"] };
+export const config = { path: ["/api/spelers", "/api/profiel", "/api/beschikbaarheid", "/api/clubs", "/api/overzicht", "/api/partijen", "/api/partijen/*", "/api/antwoord", "/api/agenda", "/api/standaardweek"] };

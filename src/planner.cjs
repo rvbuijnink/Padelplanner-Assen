@@ -172,8 +172,22 @@
   // Status van een week voor één speler: ingevuld of nog open.
   function weekStatus(speler, weekKey) {
     const w = speler && speler.weken && speler.weken[weekKey];
+    if (w && w.standaard) return { soort: 'standaard' };
     if (w) return { soort: 'ingevuld', bijgewerkt: w.bijgewerkt };
     return { soort: 'open' };
+  }
+  // Standaardweek (weekdag "0" = maandag … "6" = zondag -> tijden) omzetten naar de datums van één week.
+  function standaardVoorWeek(standaard, weekKey) {
+    const out = {};
+    dagenVanWeek(weekKey).forEach((d, i) => { const t = standaard && standaard[String(i)]; if (t && t.length) out[d] = t.slice(); });
+    return out;
+  }
+  // Weken die de speler niet zelf heeft ingevuld krijgen de standaardweek (gemarkeerd met standaard: true).
+  function vulStandaardweek(weken, standaard, weekKeys) {
+    const out = Object.assign({}, weken || {});
+    if (!standaard || !Object.keys(standaard).length) return out;
+    for (const w of weekKeys) if (!out[w]) out[w] = { tijdvakken: standaardVoorWeek(standaard, w), standaard: true };
+    return out;
   }
   // Alle weken samenvoegen tot één overzicht datum -> tijdvakken
   function beschikbaarVan(speler) {
@@ -372,7 +386,7 @@
     NIVEAUS, NIVEAU_MIN, NIVEAU_MAX, NIVEAU_STAP, niveauGetal, rangeVan, geldigNiveau, niveauLabel, wensBereik, geldigeWens, wilMet, wensLabel, DUREN, SLOTS, OUDE_SLOTS, DAG_VAN, DAG_TOT, STAP, VENSTER_DAGEN,
     naarMin, naarTijd, leesTijd, tijdId, tijdLabel, tijdenVan, normaliseer, vrijVanaf, WEKEN_ZICHTBAAR, HORIZON_STANDAARD, HORIZON_MAX, VOORKEUREN, FREQUENTIES,
     dagKey, parseKey, dagenTussen, volgendeDagen,
-    maandagVan, weken, dagenVanWeek, boekingsHorizon, wekenBinnenHorizon, weekStatus, beschikbaarVan, voorkeurVan, isLenteZomer, clubOk,
+    maandagVan, weken, dagenVanWeek, boekingsHorizon, wekenBinnenHorizon, weekStatus, standaardVoorWeek, vulStandaardweek, beschikbaarVan, voorkeurVan, isLenteZomer, clubOk,
     compatibel, groepenVanVier, status, prijs, isDal, voegClubsSamen, plan
   };
 });

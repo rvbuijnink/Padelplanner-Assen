@@ -61,6 +61,9 @@ export function verlooptOp(uitgenodigd: Date, partij: { datum: string; tijd: str
   return uitgenodigd.getTime() + marge;
 }
 
+// De maandagen van deze week en de weken waarin je al kunt reserveren (hooguit 6 weken vooruit).
+export const komendeWeken = (vandaag: string) => Array.from({ length: 7 }, (_, i) => plusDagen(maandag(vandaag), 7 * i));
+
 // ---- Gegevens laden ----
 type Speler = typeof spelers.$inferSelect & { weken: Record<string, { tijdvakken: Record<string, string[]> }> };
 type Deelnemer = typeof partijDeelnemers.$inferSelect;
@@ -89,7 +92,8 @@ async function laad(): Promise<Context> {
     spelers: sp.map((s) => {
       const weken: Speler["weken"] = {};
       for (const w of best) if (w.spelerId === s.id) weken[w.week] = { tijdvakken: w.tijdvakken };
-      return { ...s, weken };
+      // Weken die de speler niet zelf heeft ingevuld: de standaardweek (als die er is).
+      return { ...s, weken: P.vulStandaardweek(weken, s.standaardWeek, komendeWeken(vandaag)) };
     }),
     partijen: lijst.map((p) => ({ ...p, rijen: rijen.filter((r) => r.partijId === p.id) })),
     clubs: P.voegClubsSamen((clubsJson as any).clubs, g),
@@ -152,6 +156,67 @@ function pastBij(ctx: Context, s: Speler, p: { id?: number; datum: string; tijd:
 const aantalPartijen = (ctx: Context, s: Speler) =>
   ctx.partijen.filter((p) => p.datum >= ctx.vandaag && p.rijen.some((r) => r.spelerId === s.id && isActief(r))).length;
 
+// ---- Agenda (.ics) ----
+const icsTijd = (ms: number) => new Date(ms).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+const icsTekst = (t: string) => t.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+// Regels langer dan 75 tekens worden volgens de standaard gevouwen.
+const vouw = (regel: string) => {
+  const delen: string[] = [];
+  let r = regel;
+  while (r.length > 74) { delen.push(r.slice(0, 74)); r = " " + r.slice(74); }
+  delen.push(r);
+  return delen.join("\r\n");
+};
+function icsVan(ctx: Context, p: Partij) {
+  const club = clubVan(ctx, p.clubId);
+  const start = nlMoment(p.datum, p.tijd);
+  const namen = spelendVan(p).slice(0, MAX_SPELERS).map((r) => spelerVan(ctx, r.spelerId)?.naam).filter(Boolean) as string[];
+  const boeker = spelerVan(ctx, p.boekerId);
+  const omschrijving =
+    `Padel bij ${club.naam}, ${p.duur === 90 ? "1,5 uur" : "1 uur"}.\n` +
+    (namen.length ? `Spelers: ${naamLijst(namen)}.\n` : "") +
+    (boeker ? `${boeker.naam} boekt de baan.\n` : "") +
+    `Bekijk de partij: ${siteUrl()}/?tab=planning`;
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Padelplanner Assen//NL",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:partij-${p.id}@padelplanner-assen`,
+    `DTSTAMP:${icsTijd(Date.now())}`,
+    `DTSTART:${icsTijd(start)}`,
+    `DTEND:${icsTijd(start + p.duur * 60000)}`,
+    `SUMMARY:${icsTekst(`Padel bij ${club.naam}`)}`,
+    `LOCATION:${icsTekst(club.naam)}`,
+    `DESCRIPTION:${icsTekst(omschrijving)}`,
+    `URL:${siteUrl()}/?tab=planning`,
+    "BEGIN:VALARM",
+    "ACTION:DISPLAY",
+    "DESCRIPTION:Padel",
+    "TRIGGER:-PT2H",
+    "END:VALARM",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].map(vouw).join("\r\n") + "\r\n";
+}
+const icsBijlage = (ctx: Context, p: Partij) => ({ naam: "padel.ics", inhoud: icsVan(ctx, p), type: "text/calendar; charset=utf-8; method=PUBLISH" });
+const agendaLink = (p: Partij, spelerId: number) => {
+  const t = p.rijen.find((r) => r.spelerId === spelerId)?.token;
+  return t ? { label: "Zet in agenda", url: `${siteUrl()}/api/agenda?t=${t}` } : null;
+};
+
+// Agenda-afspraak voor een partij, alleen voor wie meespeelt (of de baan boekte).
+export async function agendaVoor(partijId: number, spelerId: number) {
+  const ctx = await laad();
+  const p = ctx.partijen.find((x) => x.id === partijId);
+  if (!p) return null;
+  const rij = p.rijen.find((r) => r.spelerId === spelerId);
+  if (!(rij && isActief(rij)) && p.boekerId !== spelerId) return null;
+  return icsVan(ctx, p);
+}
+
 // ---- E-mails ----
 const clubVan = (ctx: Context, id: string) => ctx.clubs.find((c) => c.id === id) || { id, naam: id, boeken: siteUrl() };
 const partijTekst = (ctx: Context, p: Partij | typeof partijen.$inferSelect) =>
@@ -176,7 +241,9 @@ function uitnodiging(ctx: Context, p: Partij, s: Speler, token: string): Mail | 
     tekst:
       `Hoi ${s.naam},\n\n` +
       "Volgens je beschikbaarheid kun je op dit moment, dus er is een partij voor je gepland.\n\n" +
-      (p.automatisch ? `Bij het plannen was er bij ${clubVan(ctx, p.clubId).naam} nog een baan vrij. Wie als laatste van de vier bevestigt, boekt meteen de baan.\n\n` : "") +
+      (p.geboekt
+        ? `Iemand kan toch niet, dus je kunt invallen. De baan is al geboekt${spelerVan(ctx, p.boekerId) ? ` door ${spelerVan(ctx, p.boekerId)!.naam}` : ""}; je betaalt alleen je deel.\n\n`
+        : p.automatisch ? `Bij het plannen was er bij ${clubVan(ctx, p.clubId).naam} nog een baan vrij. Wie als laatste van de vier bevestigt, boekt meteen de baan.\n\n` : "") +
       `Wanneer: ${partijTekst(ctx, p)}\n` +
       `Met: ${anderen.length ? naamLijst(anderen) : "nog onbekend"}\n\n` +
       `Laat het weten vóór ${tot}. Reageer je niet op tijd, dan vragen we iemand anders.`,
@@ -188,10 +255,46 @@ function gaatDoor(ctx: Context, p: Partij, vier: Speler[], boeker: Speler, laats
   const club = clubVan(ctx, p.clubId);
   const pr = P.prijs(club, p.duur, p.datum, P.tijdId(naarMin(p.tijd), naarMin(p.tijd) + p.duur));
   const kosten = pr ? ` De baan kost ongeveer € ${pr.perBaan.toFixed(2).replace(".", ",")}, dat is € ${pr.perPersoon.toFixed(2).replace(".", ",")} per persoon.` : "";
+  const planner = { label: "Naar de Padelplanner", url: `${siteUrl()}/?tab=planning` };
+  const agenda = (s: Speler) => agendaLink(p, s.id);
+  const bijlagen = [icsBijlage(ctx, p)];
+  // De baan was al geboekt (er is een vervanger gevonden): niet opnieuw boeken, alleen je deel betalen.
+  if (p.geboekt) {
+    const bedrag = pr ? ` Je deel is ongeveer € ${pr.perPersoon.toFixed(2).replace(".", ",")}.` : "";
+    const mails: Mail[] = vier.filter(kanMail).map((s) => {
+      const rij = p.rijen.find((r) => r.spelerId === s.id);
+      const tikkie = s.id !== boeker.id && !!p.betaallink && !rij?.betaald;
+      return {
+        aan: s.email!,
+        naam: s.naam,
+        onderwerp: `De partij van ${dagTekst(p.datum)} om ${p.tijd} is weer compleet`,
+        tekst:
+          `Hoi ${s.naam},\n\nDe partij is weer compleet en gaat door!\n\n` +
+          `Wanneer: ${partijTekst(ctx, p)}\nSpelers: ${naamLijst(vier.map((x) => x.naam))}\n\n` +
+          (s.id === boeker.id ? "Jij hebt de baan al geboekt, die hoeft niet opnieuw." : `De baan is al geboekt door ${boeker.naam}.${bedrag}`) +
+          (tikkie ? " Betaal je deel via de Tikkie hieronder." : "") +
+          `\n\nKun je toch niet? Meld je dan af op de site, dan zoeken we een vervanger.`,
+        knoppen: [...(tikkie ? [{ label: "Betaal je deel (Tikkie)", url: p.betaallink! }] : []), ...([agenda(s)].filter(Boolean) as { label: string; url: string }[]), planner],
+        bijlagen,
+      };
+    });
+    // Speelt wie boekte zelf niet meer mee? Dan krijgt die bericht wie er invalt.
+    if (!vier.some((s) => s.id === boeker.id) && kanMail(boeker)) {
+      mails.push({
+        aan: boeker.email!,
+        naam: boeker.naam,
+        onderwerp: `Er is een vervanger voor de partij van ${dagTekst(p.datum)}`,
+        tekst: `Hoi ${boeker.naam},\n\nDe partij van ${partijTekst(ctx, p)} is weer compleet met ${naamLijst(vier.map((x) => x.naam))}. De baan die jij hebt geboekt wordt dus gebruikt. Spreek met de spelers af hoe zij jou betalen.`,
+        knoppen: [planner],
+      });
+    }
+    return mails;
+  }
   return vier.filter(kanMail).map((s) => ({
     aan: s.email!,
     naam: s.naam,
     onderwerp: `De partij van ${dagTekst(p.datum)} om ${p.tijd} gaat door`,
+    bijlagen,
     tekst:
       `Hoi ${s.naam},\n\nAlle vier spelers hebben bevestigd. De partij gaat door!\n\n` +
       `Wanneer: ${partijTekst(ctx, p)}\nSpelers: ${naamLijst(vier.map((x) => x.naam))}\n\n` +
@@ -199,7 +302,7 @@ function gaatDoor(ctx: Context, p: Partij, vier: Speler[], boeker: Speler, laats
         ? `${laatste === s.id ? "Jij bevestigde als laatste, dus jij boekt de baan." : "Jij boekt de baan."} Doe dat zo snel mogelijk via de knop hieronder.${kosten} Is er geen baan meer vrij? Laat het de anderen weten.\n\nGeboekt? Druk bij de partij op de site op "Baan is geboekt" en plak daar eventueel je Tikkie (of andere betaallink). De anderen krijgen dan een mail dat de baan geboekt is, met de Tikkie erin; je hebt hun nummers niet nodig. Ook zonder Tikkie krijgen ze die mail.`
         : `${boeker.naam} boekt de baan.${kosten}`) +
       `\n\nKun je toch niet? Meld je dan af op de site, dan zoeken we een vervanger.`,
-    knoppen: s.id === boeker.id ? [{ label: `Boek bij ${club.naam}`, url: club.boeken }, { label: "Naar de Padelplanner", url: `${siteUrl()}/?tab=planning` }] : [{ label: "Naar de Padelplanner", url: `${siteUrl()}/?tab=planning` }],
+    knoppen: [...(s.id === boeker.id ? [{ label: `Boek bij ${club.naam}`, url: club.boeken }] : []), ...([agenda(s)].filter(Boolean) as { label: string; url: string }[]), planner],
   }));
 }
 
@@ -248,7 +351,8 @@ async function werkBij(ctx: Context, p: Partij, mails: Mail[], laatste?: number)
     const vier = vierRijen.map((r) => spelerVan(ctx, r.spelerId)).filter(Boolean) as Speler[];
     // Bleef wie al boekte in de partij, dan blijft die boeken (de baan kan al geboekt zijn).
     // Anders boekt wie de partij net compleet maakte, zodat er niet nog op iemand anders gewacht hoeft te worden.
-    let boeker = vier.find((s) => s.id === p.boekerId) ?? vier.find((s) => s.id === laatste);
+    // Was de baan al geboekt (er viel iemand in), dan blijft wie boekte de boeker, ook als die zelf niet meer meespeelt.
+    let boeker = vier.find((s) => s.id === p.boekerId) ?? (p.geboekt ? spelerVan(ctx, p.boekerId) : undefined) ?? vier.find((s) => s.id === laatste);
     if (!boeker) {
       // Wie het minst vaak heeft geboekt, boekt nu (zo rouleert het).
       const keer = (s: Speler) => ctx.partijen.filter((q) => q.boekerId === s.id).length;
@@ -268,7 +372,7 @@ async function werkBij(ctx: Context, p: Partij, mails: Mail[], laatste?: number)
     p.compleetGemeld = true;
     p.boekerId = boeker.id;
     mails.push(...gaatDoor(ctx, p, vier, boeker, laatste));
-    return boeker.id === laatste;
+    return !p.geboekt && boeker.id === laatste;
   }
   return false;
 }
@@ -366,13 +470,21 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
       await db.delete(partijDeelnemers).where(and(eq(partijDeelnemers.partijId, p.id), eq(partijDeelnemers.spelerId, s.id)));
       p.rijen = p.rijen.filter((r) => r.spelerId !== s.id);
     }
-    tekst = p.automatisch ? "Jammer! We vragen iemand anders." : "Je bent afgemeld.";
+    const laat = nlMoment(p.datum, p.tijd) - Date.now() <= 3 * UUR;
+    tekst = !p.automatisch ? "Je bent afgemeld."
+      : !speeldeMee ? "Je staat niet meer op de reservelijst."
+      : laat ? "Je bent afgemeld. De partij begint binnen 3 uur, dus we zoeken niet meer automatisch een vervanger. De andere spelers krijgen een mail."
+      : p.compleetGemeld ? "Je bent afgemeld. We zoeken een vervanger: eerst op de reservelijst, daarna bij andere spelers die kunnen. De anderen krijgen een mail."
+      : "Jammer! We vragen iemand anders.";
     // Was de partij al compleet, dan horen de anderen het en zoeken we opnieuw.
     if (speeldeMee && p.compleetGemeld) {
-      const boekerWeg = p.boekerId === s.id;
+      // Is de baan al geboekt, dan blijft die op naam van wie boekte: die hoeft niet opnieuw te boeken.
+      const boekerWeg = p.boekerId === s.id && !p.geboekt;
+      const geboektDoorMij = p.boekerId === s.id && p.geboekt;
       await db.update(partijen).set({ compleetGemeld: false, ...(boekerWeg ? { boekerId: null } : {}) }).where(eq(partijen.id, p.id));
       p.compleetGemeld = false;
       if (boekerWeg) p.boekerId = null;
+      if (geboektDoorMij) tekst += " De baan blijft op jouw naam staan; spreek met de vervanger af hoe die jou betaalt.";
       for (const r of spelendVan(p)) {
         const ander = spelerVan(ctx, r.spelerId);
         if (!kanMail(ander)) continue;
@@ -382,8 +494,11 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
           onderwerp: `${s.naam} kan toch niet op ${dagTekst(p.datum)}`,
           tekst:
             `Hoi ${ander.naam},\n\n${s.naam} kan toch niet meedoen aan de partij van ${partijTekst(ctx, p)}.\n\n` +
-            (p.automatisch ? "We zoeken een vervanger. Je krijgt een mail zodra de partij weer compleet is." : "Kijk op de site of iemand anders kan invallen.") +
-            (boekerWeg ? `\n\nLet op: ${s.naam} zou de baan boeken. Is die al geboekt, spreek dan onderling af wie hem overneemt.` : ""),
+            (p.automatisch && !laat
+              ? "We zoeken een vervanger: eerst op de reservelijst, daarna bij andere spelers die kunnen. Je krijgt een mail zodra de partij weer compleet is."
+              : "De partij begint binnenkort, dus we zoeken niet automatisch meer een vervanger. Weet je iemand die kan invallen? Vraag het gerust.") +
+            (p.geboekt ? `\n\nDe baan is al geboekt${spelerVan(ctx, p.boekerId) ? ` door ${spelerVan(ctx, p.boekerId)!.naam}` : ""} en blijft staan.` : "") +
+            (boekerWeg ? `\n\nLet op: ${s.naam} zou de baan boeken. Zodra de partij weer compleet is, boekt iemand anders.` : ""),
           knoppen: [{ label: "Naar de Padelplanner", url: `${siteUrl()}/?tab=planning` }],
         });
       }
@@ -532,6 +647,7 @@ export async function automatischPlannen() {
     }
   }
   for (const p of ctx.partijen) await werkBij(ctx, p, mails);
+  await dagHerinneringen(ctx, mails);
   const nieuw = await zoekNieuwePartijen(ctx, mails);
   await verstuur(mails);
   console.log(`Automatisch plannen: ${nieuw} nieuwe partij(en), ${verlopen} verlopen uitnodiging(en), ${mails.length} e-mail(s).`);
@@ -542,4 +658,81 @@ export async function zoekUitnodiging(token: string) {
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) return null;
   const [r] = await db.select().from(partijDeelnemers).where(eq(partijDeelnemers.token, token));
   return r ?? null;
+}
+
+// ---- Herinnering op de dag zelf ----
+// Zo'n 3 à 4 uur voor een partij die doorgaat: tijd, club, wie er meespelen, en de Tikkie voor wie nog niet heeft betaald.
+async function dagHerinneringen(ctx: Context, mails: Mail[]) {
+  const nu = Date.now();
+  for (const p of ctx.partijen) {
+    if (!p.compleetGemeld || p.dagHerinnerd) continue;
+    const start = nlMoment(p.datum, p.tijd);
+    if (start <= nu || start - nu > 4 * UUR) continue;
+    const vier = spelendVan(p).slice(0, MAX_SPELERS);
+    if (vier.length < MAX_SPELERS) continue;
+    await db.update(partijen).set({ dagHerinnerd: true }).where(eq(partijen.id, p.id));
+    p.dagHerinnerd = true;
+    const club = clubVan(ctx, p.clubId);
+    const boeker = spelerVan(ctx, p.boekerId);
+    const namen = vier.map((r) => spelerVan(ctx, r.spelerId)?.naam).filter(Boolean) as string[];
+    const pr = P.prijs(club, p.duur, p.datum, P.tijdId(naarMin(p.tijd), naarMin(p.tijd) + p.duur));
+    const bedrag = pr ? ` (ongeveer € ${pr.perPersoon.toFixed(2).replace(".", ",")})` : "";
+    for (const r of vier) {
+      const s = spelerVan(ctx, r.spelerId);
+      if (!kanMail(s)) continue;
+      const ikBoek = s.id === p.boekerId;
+      const tikkie = !ikBoek && p.geboekt && !!p.betaallink && !r.betaald;
+      mails.push({
+        aan: s.email!,
+        naam: s.naam,
+        onderwerp: `Vandaag padel om ${p.tijd} bij ${club.naam}`,
+        tekst:
+          `Hoi ${s.naam},\n\nVandaag is het zover!\n\n` +
+          `Wanneer: ${partijTekst(ctx, p)}\nSpelers: ${naamLijst(namen)}\n` +
+          (p.geboekt
+            ? `Baan: geboekt${boeker ? ` door ${boeker.naam}` : ""}.`
+            : ikBoek ? "Let op: de baan staat nog niet op geboekt. Boek hem nu en zet hem op de site op geboekt." : `Let op: de baan staat nog niet op geboekt${boeker ? `; ${boeker.naam} boekt hem` : ""}.`) +
+          (p.opmerking && p.opmerking !== "Automatisch gepland" ? `\nOpmerking: ${p.opmerking}` : "") +
+          (tikkie ? `\n\nJe hebt je deel${bedrag} nog niet betaald. Dat kan via de Tikkie hieronder.` : "") +
+          `\n\nKun je toch niet? Meld je dan zo snel mogelijk af op de site, dan krijgen de anderen bericht. Veel plezier!`,
+        knoppen: [
+          ...(tikkie ? [{ label: "Betaal je deel (Tikkie)", url: p.betaallink! }] : []),
+          ...(ikBoek && !p.geboekt ? [{ label: `Boek bij ${club.naam}`, url: club.boeken }] : []),
+          { label: "Naar de Padelplanner", url: `${siteUrl()}/?tab=planning` },
+        ],
+      });
+    }
+  }
+}
+
+// ---- Wekelijkse herinnering: beschikbaarheid invullen ----
+// Op zondagavond: wie nog weken open heeft staan (binnen de periode waarin je al kunt reserveren) krijgt een mail.
+// Niet voor spelers met een standaardweek: hun weken zijn automatisch ingevuld.
+export async function herinnerBeschikbaarheid() {
+  const ctx = await laad();
+  const horizon = P.boekingsHorizon(ctx.clubs);
+  const laatsteWeek = maandag(plusDagen(ctx.vandaag, horizon));
+  const weken: string[] = [];
+  for (let w = plusDagen(maandag(ctx.vandaag), 7); w <= laatsteWeek; w = plusDagen(w, 7)) weken.push(w);
+  const mails: Mail[] = [];
+  for (const s of ctx.spelers) {
+    if (!kanMail(s) || !s.herinneringAan) continue;
+    if (s.standaardWeek && Object.keys(s.standaardWeek).length) continue;
+    const open = weken.filter((w) => !s.weken[w]);
+    if (!open.length) continue;
+    const wekenTekst = naamLijst(open.map((w) => `de week van ${new Date(utc(w)).toLocaleDateString("nl-NL", { day: "numeric", month: "long", timeZone: "UTC" })}`));
+    mails.push({
+      aan: s.email!,
+      naam: s.naam,
+      onderwerp: open.length === 1 ? "Vul je beschikbaarheid in voor padel" : `Nog ${open.length} weken padel-beschikbaarheid in te vullen`,
+      tekst:
+        `Hoi ${s.naam},\n\nJe hebt nog niet ingevuld wanneer je kunt in ${wekenTekst}. ` +
+        "De planner kan je alleen inplannen als je beschikbaarheid bekend is. Kun je een week niet? Klik dan op \"Ik kan deze week niet\", dan krijg je er geen herinnering meer over.\n\n" +
+        "Tip: kun je meestal op dezelfde momenten? Stel dan een standaardweek in. Die geldt voor elke week die je niet zelf aanpast, en dan krijg je deze mail niet meer.\n\n" +
+        "Geen herinneringen meer? Zet ze uit bij Vaste instellingen.",
+      knoppen: [{ label: "Beschikbaarheid invullen", url: `${siteUrl()}/?tab=beschikbaarheid&week=${open[0]}` }],
+    });
+  }
+  await verstuur(mails);
+  console.log(`Herinnering beschikbaarheid: ${mails.length} e-mail(s).`);
 }
