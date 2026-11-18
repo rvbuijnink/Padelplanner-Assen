@@ -6,7 +6,9 @@
 // Zonder instellingen worden er geen e-mails verstuurd; de site blijft gewoon werken (uitnodigingen staan ook op de site).
 import nodemailer from "nodemailer";
 
-export type Mail = { aan: string; naam?: string; onderwerp: string; tekst: string; knoppen?: { label: string; url: string }[] };
+// Bijlage als tekst (bijv. een agenda-afspraak .ics).
+export type Bijlage = { naam: string; inhoud: string; type: string };
+export type Mail = { aan: string; naam?: string; onderwerp: string; tekst: string; knoppen?: { label: string; url: string }[]; bijlagen?: Bijlage[] };
 
 const env = (k: string): string | undefined => (globalThis as any).Netlify?.env?.get(k) ?? process.env[k];
 
@@ -54,10 +56,13 @@ async function verstuurEen(m: Mail) {
       subject: m.onderwerp,
       html: html(m),
       text: platteTekst(m),
+      attachments: (m.bijlagen ?? []).map((b) => ({ filename: b.naam, content: b.inhoud, contentType: b.type })),
     });
     return;
   }
   const afzender = env("MAIL_AFZENDER")!;
+  const b64 = (t: string) => Buffer.from(t, "utf8").toString("base64");
+  const bijlagen = m.bijlagen ?? [];
   const brevo = env("BREVO_API_KEY");
   const r = brevo
     ? await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -69,13 +74,15 @@ async function verstuurEen(m: Mail) {
           subject: m.onderwerp,
           htmlContent: html(m),
           textContent: platteTekst(m),
+          ...(bijlagen.length ? { attachment: bijlagen.map((b) => ({ name: b.naam, content: b64(b.inhoud) })) } : {}),
         }),
         signal: AbortSignal.timeout(10000),
       })
     : await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { authorization: `Bearer ${env("RESEND_API_KEY")}`, "content-type": "application/json" },
-        body: JSON.stringify({ from: `Padelplanner Assen <${afzender}>`, to: [m.aan], subject: m.onderwerp, html: html(m), text: platteTekst(m) }),
+        body: JSON.stringify({ from: `Padelplanner Assen <${afzender}>`, to: [m.aan], subject: m.onderwerp, html: html(m), text: platteTekst(m),
+          ...(bijlagen.length ? { attachments: bijlagen.map((b) => ({ filename: b.naam, content: b64(b.inhoud) })) } : {}) }),
         signal: AbortSignal.timeout(10000),
       });
   if (!r.ok) throw new Error(`E-mail versturen mislukt: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);

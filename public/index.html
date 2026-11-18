@@ -139,6 +139,15 @@
   .uitleg .voorwaarden li { margin:0 0 2px; }
   .uitleg .kleuren { list-style:none; margin:0 0 10px; padding:0; display:grid; gap:3px; }
   .uitleg p { margin:0; }
+  .startlijst { padding:12px 14px; border-radius:12px; border:2px solid var(--bal); background:color-mix(in srgb, var(--bal) 14%, transparent); margin-bottom:14px; font-size:.95rem; }
+  .startlijst ol { margin:6px 0 0; padding-left:1.4em; }
+  .startlijst li { margin:2px 0; }
+  .startlijst li.klaar { color:var(--zacht); text-decoration:line-through; }
+  .startlijst li button.link { font-weight:600; }
+  details.inklap { margin:4px 0 8px; }
+  details.inklap > summary { cursor:pointer; font-weight:600; color:var(--accent); margin-bottom:8px; }
+  details.standaardweek { padding:12px 14px; border:1px solid var(--lijn); border-radius:12px; background:var(--veld); margin-bottom:14px; }
+  .st-standaard { color:var(--accent); }
 
   table.banen { width:100%; border-collapse:collapse; font-size:.92rem; }
   table.banen th, table.banen td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--lijn); vertical-align:top; }
@@ -295,6 +304,7 @@
         </fieldset>
         <fieldset id="niveau-veld">
           <legend><label for="niveau">Speelsterkte: op welk niveau speel je ongeveer?</label></legend>
+          <p class="hint">Weet je het niet precies? Een schatting is genoeg, je kunt het later aanpassen.</p>
           <div class="niveau-schuif">
             <div class="niveau-baan">
               <input type="range" id="niveau" min="7" max="10" step="0.1" value="8">
@@ -324,6 +334,7 @@
         </fieldset>
         <fieldset>
           <legend>Hoe vaak wil je met de groep spelen?</legend>
+          <p class="hint">Dit is het maximum: de site plant je nooit vaker in.</p>
           <select id="frequentie"></select>
         </fieldset>
         <fieldset>
@@ -337,13 +348,18 @@
         </fieldset>
         <fieldset>
           <legend>Baanvoorkeur: waar wil je wel of niet spelen?</legend>
-          <p class="hint">Bij "Niet" plant de planner je nooit bij die club in. Bij buitenbanen kun je ook "Alleen lente en zomer" kiezen: dan telt die club alleen van 21 maart t/m 22 september mee.</p>
-          <div class="scroll"><table class="voorkeur" id="voorkeur"></table></div>
+          <p class="hint" id="voorkeur-samenvatting">Maakt niet uit: je kunt bij alle clubs worden ingepland.</p>
+          <details class="inklap" id="voorkeur-details">
+            <summary>Clubs aanpassen</summary>
+            <p class="hint">Bij "Niet" plant de planner je nooit bij die club in. Bij buitenbanen kun je ook "Alleen lente en zomer" kiezen: dan telt die club alleen van 21 maart t/m 22 september mee.</p>
+            <div class="scroll"><table class="voorkeur" id="voorkeur"></table></div>
+          </details>
         </fieldset>
         <fieldset>
           <legend>E-mail</legend>
           <label class="optie"><input type="checkbox" id="mail-aan" checked> Stuur me uitnodigingen voor partijen per e-mail</label>
-          <p class="hint">De site plant zelf partijen als vier spelers kunnen. Je krijgt dan een mail met <em>Ik doe mee</em> of <em>Kan toch niet</em>. Zonder e-mail zie je uitnodigingen alleen hier bij <em>Geplande partijen</em>.</p>
+          <label class="optie"><input type="checkbox" id="herinnering-aan" checked> Herinner me op zondagavond als ik mijn beschikbaarheid nog niet heb ingevuld</label>
+          <p class="hint">De site plant zelf partijen als vier spelers kunnen. Je krijgt dan een mail met <em>Ik doe mee</em> of <em>Kan toch niet</em>. Zonder e-mail zie je uitnodigingen alleen hier bij <em>Geplande partijen</em>. Op de dag van een partij krijg je een paar uur van tevoren nog een herinnering. Heb je een standaardweek, dan krijg je geen herinnering om in te vullen.</p>
         </fieldset>
         <button type="submit">Instellingen opslaan</button>
         <div class="melding" id="profiel-melding" role="status"></div>
@@ -356,6 +372,17 @@
     <section>
       <h2>Beschikbaarheid per week</h2>
       <div class="uitleg" id="weken-uitleg">Vul je beschikbaarheid in voor alle weken waarin je al een baan kunt reserveren. Zo kan de planner partijen maken zodra er een baan vrij is. Je kunt het altijd nog aanpassen.</div>
+      <details class="inklap standaardweek" id="sw-details">
+        <summary>Standaardweek: kun je meestal op dezelfde momenten? <span id="sw-stand" class="hint"></span></summary>
+        <p class="hint">Vul één keer in wanneer je normaal kunt. Dit geldt automatisch voor elke week die je niet zelf invult. Wijkt een week af? Pas die week hieronder aan en sla hem op; dan geldt alleen voor die week iets anders.</p>
+        <div id="sw-raster"></div>
+        <div class="boekrij">
+          <button type="button" id="sw-opslaan">Standaardweek opslaan</button>
+          <button type="button" class="rustig" id="sw-van-week">Neem over van de gekozen week</button>
+          <button type="button" class="link" id="sw-wis">Standaardweek wissen</button>
+        </div>
+        <div class="melding" id="sw-melding" role="status"></div>
+      </details>
       <div class="weken" id="weken"></div>
       <h3 id="week-titel" style="margin:0 0 8px;font-size:1.02rem"></h3>
       <p class="hint" id="week-status"></p>
@@ -374,6 +401,10 @@
   <div class="paneel" id="paneel-planning" hidden>
     <section>
       <h2>Geplande partijen</h2>
+      <div class="startlijst" id="startlijst" hidden>
+        <strong>Zo begin je</strong>
+        <ol id="startlijst-stappen"></ol>
+      </div>
       <div class="uitleg">
         <ul class="kleuren" aria-label="Kleuren">
           <li>🔴 <strong>Rood:</strong> vier spelers kunnen, maar moeten nog bevestigen.</li>
@@ -400,6 +431,8 @@
           <li><span class="nr">3.</span><div><strong>Bevestigen.</strong> Elke speler bevestigt of zegt af. Reageer je niet op tijd of zeg je af, dan komt de volgende speler die ook kan in jouw plaats. Je hebt maximaal 12 uur om te reageren. Hoe sneller je reageert, hoe groter de kans dat de baan nog beschikbaar is. Is de partij eerder, dan de helft van de tijd tot de partij (minstens 2 uur). De uiterste tijd staat in de mail.</div></li>
           <li><span class="nr">4.</span><div><strong>Alle vier deelnemers hebben bevestigd.</strong> Wie als vierde bevestigt, boekt meteen de baan: die krijgt direct na het bevestigen de knop om te boeken. Iedereen krijgt een mail dat de partij doorgaat, met de naam van degene die de baan boekt.</div></li>
           <li><span class="nr">5.</span><div><strong>De baan boeken.</strong> De vierde speler boekt de baan meteen en plakt een Tikkie bij de partij. De anderen krijgen een mail dat de baan geboekt is, met de Tikkie in de mail. De boeker kan er ook voor kiezen om op een andere manier de baan betaald te krijgen, ook dan krijg je een boekingsbevestiging per mail.</div></li>
+          <li><span class="nr">6.</span><div><strong>Op de dag zelf.</strong> Een paar uur voor de partij krijg je een herinnering met tijd, club, medespelers en (als je nog niet betaald hebt) de Tikkie. Met <em>Zet in agenda</em> zet je de partij in je agenda; in de mail "de partij gaat door" zit hij ook als bijlage.</div></li>
+          <li><span class="nr">7.</span><div><strong>Toch niet kunnen?</strong> Klik bij de partij op <em>Ik kan toch niet, zoek vervanger</em>. De anderen krijgen bericht en de site zoekt een vervanger: eerst op de reservelijst, daarna bij andere spelers die kunnen. Een geboekte baan blijft gewoon staan. In de laatste 3 uur voor de partij wordt er niet meer automatisch gezocht.</div></li>
         </ol>
       </div>
     </section>
@@ -556,15 +589,26 @@
     $('frequentie').value = r ? r.frequentie : 'wanneer-het-lukt';
     $('rust-dagen').value = String(r && r.rustDagen ? r.rustDagen : 0);
     $('mail-aan').checked = !r || r.mailAan !== false;
+    $('herinnering-aan').checked = !r || r.herinneringAan !== false;
     clubs.forEach((c) => {
       const v = r ? P.voorkeurVan(r, c.id) : 'wel';
       document.querySelectorAll('input[name="club-' + c.id + '"]').forEach((i) => (i.checked = i.value === v));
     });
+    toonVoorkeurSamenvatting();
   }
+  // Baanvoorkeur kort samenvatten; de tabel staat ingeklapt.
+  function toonVoorkeurSamenvatting() {
+    const niet = clubs.filter((c) => (document.querySelector('input[name="club-' + c.id + '"]:checked') || {}).value === 'niet').map((c) => c.naam);
+    const zomer = clubs.filter((c) => (document.querySelector('input[name="club-' + c.id + '"]:checked') || {}).value === 'zomer').map((c) => c.naam);
+    $('voorkeur-samenvatting').textContent = !niet.length && !zomer.length ? 'Maakt niet uit: je kunt bij alle clubs worden ingepland.'
+      : [niet.length ? 'Niet bij: ' + niet.join(', ') + '.' : '', zomer.length ? 'Alleen in lente en zomer: ' + zomer.join(', ') + '.' : ''].join(' ').trim();
+  }
+  $('voorkeur').addEventListener('change', toonVoorkeurSamenvatting);
 
   // ---- Beschikbaarheid per week ----
   function statusVan(speler, week) {
     const st = P.weekStatus(speler, week);
+    if (st.soort === 'standaard') return { klasse: 'st-standaard', kort: '↻ standaardweek', lang: 'Hier geldt je standaardweek. Wijkt deze week af? Pas hem aan en klik op "Week opslaan"; dan geldt alleen voor deze week iets anders.' };
     if (st.soort === 'ingevuld') return { klasse: 'st-ingevuld', kort: '✓ ingevuld', lang: 'Ingevuld, laatst aangepast ' + tijdLabel(st.bijgewerkt) + '. Je kunt het nog aanpassen.' };
     return { klasse: 'st-open', kort: '– nog invullen', lang: 'Nog niet ingevuld. Hoe eerder je invult, hoe eerder de planner een partij voor je kan zoeken.' };
   }
@@ -572,7 +616,7 @@
   function standaardWeek() {
     const r = ik();
     // De eerste week die nog niet is ingevuld, anders deze week
-    const open = weken.find((w) => P.weekStatus(r, w).soort !== 'ingevuld');
+    const open = weken.find((w) => P.weekStatus(r, w).soort === 'open');
     return open || weken[0];
   }
 
@@ -599,9 +643,9 @@
   let laatsteKeuze = [stapVan(19 * 60), stapVan(21 * 60)];
   let dagRijen = {};
 
-  function tijdvak(d, rij, lo, hi, uit) {
-    const van = h('input', { type: 'range', min: 0, max: N, step: 1, value: lo, 'aria-label': dagLabel(d) + ', vanaf', disabled: uit });
-    const tot = h('input', { type: 'range', min: 0, max: N, step: 1, value: hi, 'aria-label': dagLabel(d) + ', tot', disabled: uit });
+  function tijdvak(label, rij, lo, hi, uit) {
+    const van = h('input', { type: 'range', min: 0, max: N, step: 1, value: lo, 'aria-label': label + ', vanaf', disabled: uit });
+    const tot = h('input', { type: 'range', min: 0, max: N, step: 1, value: hi, 'aria-label': label + ', tot', disabled: uit });
     const schuif = h('div', { class: 'schuif' }, h('div', { class: 'spoor' }), van, tot);
     schuif.style.setProperty('--n', N);
     const schaal = h('div', { class: 'schaal', 'aria-hidden': 'true' },
@@ -637,7 +681,9 @@
     return c;
   }
 
-  function dagRij(d, tijden, uit) {
+  // label en doel: voor de standaardweek (weekdag in plaats van datum, eigen verzameling rijen).
+  function dagRij(d, tijden, uit, label, doel) {
+    label = label || dagLabel(d);
     const box = h('div', { class: 'tijdvakken' });
     const leeg = h('span', { class: 'leeg' }, uit ? 'Voorbij' : 'Niet beschikbaar');
     const knop = h('button', { type: 'button', class: 'link', disabled: uit });
@@ -647,7 +693,7 @@
       knop.hidden = uit;
       knop.textContent = rij.lijst.length ? '+ Nog een tijd op deze dag' : '+ Tijd kiezen';
     };
-    rij.voegToe = (lo, hi) => { const c = tijdvak(d, rij, lo, hi, uit); rij.lijst.push(c); box.append(c.el); rij.toon(); };
+    rij.voegToe = (lo, hi) => { const c = tijdvak(label, rij, lo, hi, uit); rij.lijst.push(c); box.append(c.el); rij.toon(); };
     rij.tijden = () => P.normaliseer(rij.lijst.map((c) => c.id()));
     for (const [a, b] of P.tijdenVan(tijden)) {
       let lo = stapVan(a), hi = stapVan(b);
@@ -666,8 +712,8 @@
       rij.voegToe(lo, hi);
     });
     rij.toon();
-    dagRijen[d] = rij;
-    return h('div', { class: 'dag' + (uit ? ' voorbij' : '') }, h('strong', {}, dagLabel(d)), h('div', { class: 'dagtijden' }, leeg, box, knop));
+    (doel || dagRijen)[d] = rij;
+    return h('div', { class: 'dag' + (uit ? ' voorbij' : '') }, h('strong', {}, label), h('div', { class: 'dagtijden' }, leeg, box, knop));
   }
 
   function toonRaster(tijdvakken) {
@@ -682,9 +728,9 @@
     $('raster').replaceChildren(...P.dagenVanWeek(w).map((d) => dagRij(d, huidig[d] || [], P.dagenTussen(today, P.parseKey(d)) < 0)));
   }
 
-  function leesRaster() {
+  function leesRaster(bron) {
     const out = {};
-    for (const [d, rij] of Object.entries(dagRijen)) {
+    for (const [d, rij] of Object.entries(bron || dagRijen)) {
       const t = rij.tijden();
       if (t.length) out[d] = t;
     }
@@ -725,6 +771,89 @@
     meld('week-melding', 'Overgenomen van de week van ' + dagLabel(eerder) + '. Controleer en klik op "Week opslaan".');
   });
 
+  // ---- Standaardweek: geldt voor elke week die je niet zelf invult ----
+  const WEEKDAGEN = ['Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag'];
+  let swRijen = {};
+  function toonStandaardweek(tijden) {
+    const r = ik();
+    const sw = tijden || (r && r.standaardWeek) || {};
+    swRijen = {};
+    $('sw-raster').replaceChildren(...WEEKDAGEN.map((naam, i) => dagRij(String(i), sw[String(i)] || [], false, naam, swRijen)));
+    const heeft = !!(r && r.standaardWeek && Object.keys(r.standaardWeek).length);
+    $('sw-stand').textContent = heeft ? '(staat aan)' : '(nog niet ingesteld)';
+    $('sw-wis').hidden = !heeft;
+  }
+  async function slaStandaardweekOp(standaardWeek) {
+    if (!ik()) { meld('sw-melding', 'Sla eerst je vaste instellingen op.', 'fout'); return; }
+    try {
+      const r = await fetch('/api/standaardweek', { method: 'PUT', headers: headers({ 'content-type': 'application/json' }), body: JSON.stringify({ standaardWeek }) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');
+      await laadSpelers();
+      toonAlles();
+      meld('sw-melding', standaardWeek ? 'Standaardweek opgeslagen. Die geldt nu voor elke week die je niet zelf hebt ingevuld.' : 'Standaardweek gewist.', 'ok');
+    } catch (err) { meld('sw-melding', err.message, 'fout'); }
+  }
+  $('sw-opslaan').addEventListener('click', () => {
+    const t = leesRaster(swRijen);
+    if (!Object.keys(t).length) { meld('sw-melding', 'Kies minstens één tijd, of wis de standaardweek.', 'fout'); return; }
+    slaStandaardweekOp(t);
+  });
+  $('sw-wis').addEventListener('click', () => { if (confirm('Standaardweek wissen? Weken die je niet zelf hebt ingevuld staan dan weer open.')) slaStandaardweekOp(null); });
+  $('sw-van-week').addEventListener('click', () => {
+    const t = leesRaster();
+    const sw = {};
+    P.dagenVanWeek(actieveWeek).forEach((d, i) => { if (t[d]) sw[String(i)] = t[d]; });
+    if (!Object.keys(sw).length) { meld('sw-melding', 'In de gekozen week staan nog geen tijden.', 'fout'); return; }
+    toonStandaardweek(sw);
+    meld('sw-melding', 'Overgenomen van de week van ' + dagLabel(actieveWeek) + '. Controleer en klik op "Standaardweek opslaan".');
+  });
+
+  // ---- Zo begin je: checklist voor nieuwe spelers ----
+  function toonStartlijst() {
+    const r = ik();
+    const ingevuld = !!r && (Object.keys(r.standaardWeek || {}).length > 0 || weken.some((w) => P.weekStatus(r, w).soort !== 'open'));
+    const box = $('startlijst');
+    box.hidden = !!r && ingevuld;
+    if (box.hidden) return;
+    const stap = (klaar, tekst, tab, knop) => {
+      const b = tab ? h('button', { type: 'button', class: 'link' }, knop) : null;
+      if (b) b.addEventListener('click', () => toonTab(tab));
+      return h('li', { class: klaar ? 'klaar' : '' }, (klaar ? '✓ ' : '') + tekst, b && !klaar ? ' ' : null, klaar ? null : b);
+    };
+    $('startlijst-stappen').replaceChildren(
+      stap(!!r, 'Sla je vaste instellingen op (niveau, speelduur, hoe vaak).', 'instellingen', 'Naar instellingen →'),
+      stap(ingevuld, 'Vul je beschikbaarheid in, of stel één keer een standaardweek in.', r ? 'beschikbaarheid' : null, 'Naar beschikbaarheid →'),
+      stap(false, 'Wacht op een uitnodiging per e-mail. Zodra vier passende spelers kunnen en er een baan vrij is, plant de site een partij.'));
+  }
+
+  // ---- Agenda: partij als .ics downloaden ----
+  function icsDatum(datum, tijd, extraMin) {
+    // Zwevende lokale tijd met tijdzone Europe/Amsterdam.
+    const d = P.parseKey(datum);
+    const m = P.naarMin(tijd) + (extraMin || 0);
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, m);
+    const pad = (n) => String(n).padStart(2, '0');
+    return x.getFullYear() + pad(x.getMonth() + 1) + pad(x.getDate()) + 'T' + pad(x.getHours()) + pad(x.getMinutes()) + '00';
+  }
+  function zetInAgenda(p) {
+    const esc = (t) => String(t).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+    const club = clubNaam(p.clubId);
+    const namen = p.deelnemers.map((d) => d.naam).join(', ');
+    const nu = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Padelplanner Assen//NL', 'BEGIN:VEVENT',
+      'UID:partij-' + p.id + '@padelplanner-assen', 'DTSTAMP:' + nu,
+      'DTSTART;TZID=Europe/Amsterdam:' + icsDatum(p.datum, p.tijd), 'DTEND;TZID=Europe/Amsterdam:' + icsDatum(p.datum, p.tijd, p.duur),
+      'SUMMARY:' + esc('Padel bij ' + club), 'LOCATION:' + esc(club),
+      'DESCRIPTION:' + esc('Spelers: ' + namen + (p.boeker ? '\n' + p.boeker + ' boekt de baan.' : '') + '\n' + location.origin + '/?tab=planning'),
+      'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Padel', 'TRIGGER:-PT2H', 'END:VALARM',
+      'END:VEVENT', 'END:VCALENDAR'].join('\r\n') + '\r\n';
+    const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+    const a = h('a', { href: url, download: 'padel-' + p.datum + '.ics' });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
   // ---- Data laden ----
   let basisClubs = [];
   let padelcheckerUrl = 'https://www.padelchecker.nl/';
@@ -750,6 +879,9 @@
       if (!r.ok) { $('planner-info').textContent = data.fout || 'Gegevens laden mislukt.'; spelers = []; return; }
       $('planner-info').textContent = '';
       spelers = data.spelers;
+      // Je eigen weken die je niet zelf hebt ingevuld: daar geldt je standaardweek.
+      const mij = spelers.find((x) => x.eigen);
+      if (mij && mij.standaardWeek) mij.weken = P.vulStandaardweek(mij.weken, mij.standaardWeek, weken);
       isBeheerder = !!data.beheer;
     } catch (e) {
       $('planner-info').textContent = 'De gegevens kunnen alleen geladen worden op de Netlify-site (niet als los bestand).';
@@ -842,8 +974,18 @@
           melding.className = 'melding let';
         }
       } else if (p.doeIkMee) {
-        const af = h('button', { type: 'button', class: 'rustig' }, isReserve ? 'Van de reservelijst af' : 'Kan toch niet');
-        af.addEventListener('click', () => { if (isReserve || confirm('Weet je zeker dat je niet meer meedoet? De anderen krijgen bericht en er wordt een vervanger gezocht.')) partijActie('/afmelden', { id: p.id }, melding); });
+        const binnenkort = new Date(P.parseKey(p.datum).getTime() + P.naarMin(p.tijd) * 60000) - Date.now() <= 3 * 3600000;
+        const af = h('button', { type: 'button', class: 'rustig' }, isReserve ? 'Van de reservelijst af' : p.geboekt || p.compleet ? 'Ik kan toch niet, zoek vervanger' : 'Kan toch niet');
+        const vraag = binnenkort
+          ? 'De partij begint binnen 3 uur. Er wordt dan niet meer automatisch een vervanger gezocht; de anderen krijgen wel bericht. Toch afmelden?'
+          : 'Weet je zeker dat je niet meer meedoet? De anderen krijgen bericht. Er wordt een vervanger gezocht: eerst op de reservelijst, daarna bij andere spelers die kunnen.' +
+            (p.geboekt ? (p.boekerIkke ? ' De baan blijft op jouw naam staan; spreek met de vervanger af hoe die jou betaalt.' : ' De baan blijft geboekt.') : '');
+        af.addEventListener('click', () => { if (isReserve || confirm(vraag)) partijActie('/afmelden', { id: p.id }, melding); });
+        if (!isReserve && (p.compleet || p.geboekt)) {
+          const ag = h('button', { type: 'button', class: 'rustig' }, '📅 Zet in agenda');
+          ag.addEventListener('click', () => zetInAgenda(p));
+          knoppen.push(ag);
+        }
         knoppen.push(af);
       } else if (ik()) {
         const mee = h('button', { type: 'button', class: vol ? 'rustig' : '' }, vol ? 'Zet me op de reservelijst' : 'Ik doe mee');
@@ -1118,10 +1260,15 @@
     if (!gebruiker) { toonAuth(); return; }
     toonAuth();
     vulProfiel(ik());
-    actieveWeek = null;
+    // Link uit een e-mail: ?tab=beschikbaarheid&week=2026-11-30 opent meteen die week.
+    const q = new URLSearchParams(location.search);
+    const vraagTab = q.get('tab'), vraagWeek = q.get('week');
+    actieveWeek = vraagWeek && weken.includes(vraagWeek) ? vraagWeek : null;
     toonAlles();
-    // Je begint altijd bij Geplande partijen; zonder vaste instellingen eerst die invullen.
-    toonTab(ik() ? 'planning' : 'instellingen');
+    // Je begint bij Geplande partijen (of het tabblad uit de link); zonder vaste instellingen eerst die invullen.
+    const tabs = ['planning', 'beschikbaarheid', 'instellingen', 'beheer'];
+    toonTab(!ik() ? 'instellingen' : tabs.includes(vraagTab) ? vraagTab : 'planning');
+    if (vraagTab || vraagWeek) history.replaceState(null, '', location.pathname);
   }
 
   async function loguit() {
@@ -1189,7 +1336,7 @@
     $('nieuw-wachtwoord-uitleg').textContent = uitleg;
   }
 
-  function toonAlles() { toonWie(); toonWeken(); toonRaster(); toonPartijen(); toonPlanner(); toonBanen(); }
+  function toonAlles() { toonWie(); toonStartlijst(); toonStandaardweek(); toonWeken(); toonRaster(); toonPartijen(); toonPlanner(); toonBanen(); }
 
   // ---- Vaste instellingen opslaan ----
   $('profiel').addEventListener('submit', async (e) => {
@@ -1208,7 +1355,7 @@
     try {
       const r = await fetch('/api/profiel', {
         method: 'PUT', headers: headers({ 'content-type': 'application/json' }),
-        body: JSON.stringify({ naam, niveau, wensNiveaus, duren, frequentie: $('frequentie').value, rustDagen: Number($('rust-dagen').value), clubVoorkeur, mailAan: $('mail-aan').checked })
+        body: JSON.stringify({ naam, niveau, wensNiveaus, duren, frequentie: $('frequentie').value, rustDagen: Number($('rust-dagen').value), clubVoorkeur, mailAan: $('mail-aan').checked, herinneringAan: $('herinnering-aan').checked })
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');

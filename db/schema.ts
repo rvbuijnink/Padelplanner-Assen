@@ -19,6 +19,11 @@ export const spelers = pgTable("spelers", {
   // E-mailadres van het account (overgenomen bij inloggen) en of de speler e-mails wil krijgen.
   email: text(),
   mailAan: boolean("mail_aan").notNull().default(true),
+  // Of de speler op zondagavond een herinnering wil als er nog weken zonder beschikbaarheid zijn.
+  herinneringAan: boolean("herinnering_aan").notNull().default(true),
+  // Standaardweek: weekdag ("0" = maandag … "6" = zondag) -> tijden "UU:MM-UU:MM".
+  // Geldt voor elke week die de speler niet zelf heeft ingevuld. Leeg = geen standaardweek.
+  standaardWeek: jsonb("standaard_week").$type<Record<string, string[]>>(),
   bijgewerkt: timestamp("bijgewerkt", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -71,6 +76,8 @@ export const partijen = pgTable("partijen", {
   geboekt: boolean().notNull().default(false),
   // Betaallink (bijv. een Tikkie) die wie boekt deelt met de andere spelers.
   betaallink: text(),
+  // Of de herinnering op de dag van de partij al is verstuurd.
+  dagHerinnerd: boolean("dag_herinnerd").notNull().default(false),
   aangemaakt: timestamp("aangemaakt", { withTimezone: true }).notNull().defaultNow(),
 });
 
