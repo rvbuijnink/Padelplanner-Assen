@@ -378,8 +378,8 @@
             Is er geen baan vrij, dan wordt niemand uitgenodigd.</div></li>
           <li><span class="nr">2.</span><div><strong>Uitnodiging per e-mail.</strong> Zodra er een partij is gepland, krijgen de vier spelers een uitnodiging per e-mail.</div></li>
           <li><span class="nr">3.</span><div><strong>Bevestigen.</strong> Elke speler bevestigt of zegt af. Reageer je niet op tijd of zeg je af, dan komt de volgende speler die ook kan in jouw plaats. Je hebt maximaal 12 uur om te reageren. Hoe sneller je reageert, hoe groter de kans dat de baan nog beschikbaar is. Is de partij eerder, dan de helft van de tijd tot de partij (minstens 2 uur). De uiterste tijd staat in de mail.</div></li>
-          <li><span class="nr">4.</span><div><strong>Alle vier deelnemers hebben bevestigd.</strong> Iedereen krijgt een mail dat de partij doorgaat, met de naam van degene die de baan boekt.</div></li>
-          <li><span class="nr">5.</span><div><strong>De baan boeken.</strong> Die speler boekt de baan en plakt een Tikkie bij de partij. De anderen krijgen een mail dat de baan geboekt is, met de Tikkie in de mail. De boeker kan er ook voor kiezen om op een andere manier de baan betaald te krijgen, ook dan krijg je een boekingsbevestiging per mail.</div></li>
+          <li><span class="nr">4.</span><div><strong>Alle vier deelnemers hebben bevestigd.</strong> Wie als vierde bevestigt, boekt meteen de baan: die krijgt direct na het bevestigen de knop om te boeken. Iedereen krijgt een mail dat de partij doorgaat, met de naam van degene die de baan boekt.</div></li>
+          <li><span class="nr">5.</span><div><strong>De baan boeken.</strong> De vierde speler boekt de baan meteen en plakt een Tikkie bij de partij. De anderen krijgen een mail dat de baan geboekt is, met de Tikkie in de mail. De boeker kan er ook voor kiezen om op een andere manier de baan betaald te krijgen, ook dan krijg je een boekingsbevestiging per mail.</div></li>
         </ol>
         <ul class="kleuren" aria-label="Kleuren">
           <li>🔴 <strong>Rood:</strong> vier spelers kunnen, maar moeten nog bevestigen.</li>
@@ -829,6 +829,11 @@
         const nee = h('button', { type: 'button', class: 'rustig' }, 'Kan toch niet');
         nee.addEventListener('click', () => partijActie('/afmelden', { id: p.id }, melding));
         knoppen.push(ja, nee);
+        // Hebben de andere drie al bevestigd, dan boek jij meteen als je meedoet.
+        if (p.deelnemers.length >= 4 && p.deelnemers.filter((d) => !d.ik && d.status === 'bevestigd').length === 3) {
+          melding.textContent = 'De andere drie hebben al bevestigd. Doe je mee, dan ben jij de vierde en boek je meteen de baan.';
+          melding.className = 'melding let';
+        }
       } else if (p.doeIkMee) {
         const af = h('button', { type: 'button', class: 'rustig' }, isReserve ? 'Van de reservelijst af' : 'Kan toch niet');
         af.addEventListener('click', () => { if (isReserve || confirm('Weet je zeker dat je niet meer meedoet? De anderen krijgen bericht en er wordt een vervanger gezocht.')) partijActie('/afmelden', { id: p.id }, melding); });

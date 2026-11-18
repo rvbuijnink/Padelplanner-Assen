@@ -2,7 +2,7 @@
 // - De site zoekt zelf momenten waarop vier passende spelers kunnen én er live een baan vrij is, en maakt daar een partij van.
 // - Die spelers krijgen een uitnodiging per e-mail met "Ik doe mee" / "Kan toch niet".
 // - Wie afzegt of niet op tijd reageert, wordt vervangen door de volgende speler die ook kan.
-// - Hebben vier spelers bevestigd, dan krijgt iedereen een mail dat de partij doorgaat en wie de baan boekt.
+// - Wie als vierde bevestigt, boekt meteen de baan (krijgt direct de boekknop); iedereen krijgt een mail dat de partij doorgaat.
 // Gebruikt door de geplande functie (elk uur) en door de API (direct na een antwoord).
 import { randomBytes } from "node:crypto";
 import { and, eq, gte, inArray } from "drizzle-orm";
@@ -163,7 +163,7 @@ function uitnodiging(ctx: Context, p: Partij, s: Speler, token: string): Mail | 
     tekst:
       `Hoi ${s.naam},\n\n` +
       "Volgens je beschikbaarheid kun je op dit moment, dus er is een partij voor je gepland.\n\n" +
-      (p.automatisch ? `Bij het plannen was er bij ${clubVan(ctx, p.clubId).naam} nog een baan vrij. Die wordt geboekt zodra alle vier spelers hebben bevestigd.\n\n` : "") +
+      (p.automatisch ? `Bij het plannen was er bij ${clubVan(ctx, p.clubId).naam} nog een baan vrij. Wie als laatste van de vier bevestigt, boekt meteen de baan.\n\n` : "") +
       `Wanneer: ${partijTekst(ctx, p)}\n` +
       `Met: ${anderen.length ? naamLijst(anderen) : "nog onbekend"}\n\n` +
       `Laat het weten vóór ${tot}. Reageer je niet op tijd, dan vragen we iemand anders.`,
@@ -171,7 +171,7 @@ function uitnodiging(ctx: Context, p: Partij, s: Speler, token: string): Mail | 
   };
 }
 
-function gaatDoor(ctx: Context, p: Partij, vier: Speler[], boeker: Speler): Mail[] {
+function gaatDoor(ctx: Context, p: Partij, vier: Speler[], boeker: Speler, laatste?: number): Mail[] {
   const club = clubVan(ctx, p.clubId);
   const pr = P.prijs(club, p.duur, p.datum, P.tijdId(naarMin(p.tijd), naarMin(p.tijd) + p.duur));
   const kosten = pr ? ` De baan kost ongeveer € ${pr.perBaan.toFixed(2).replace(".", ",")}, dat is € ${pr.perPersoon.toFixed(2).replace(".", ",")} per persoon.` : "";
@@ -183,7 +183,7 @@ function gaatDoor(ctx: Context, p: Partij, vier: Speler[], boeker: Speler): Mail
       `Hoi ${s.naam},\n\nAlle vier spelers hebben bevestigd. De partij gaat door!\n\n` +
       `Wanneer: ${partijTekst(ctx, p)}\nSpelers: ${naamLijst(vier.map((x) => x.naam))}\n\n` +
       (s.id === boeker.id
-        ? `Jij boekt de baan. Doe dat zo snel mogelijk via de knop hieronder.${kosten} Is er geen baan meer vrij? Laat het de anderen weten.\n\nGeboekt? Druk bij de partij op de site op "Baan is geboekt" en plak daar eventueel je Tikkie (of andere betaallink). De anderen krijgen dan een mail dat de baan geboekt is, met de Tikkie erin; je hebt hun nummers niet nodig. Ook zonder Tikkie krijgen ze die mail.`
+        ? `${laatste === s.id ? "Jij bevestigde als laatste, dus jij boekt de baan." : "Jij boekt de baan."} Doe dat zo snel mogelijk via de knop hieronder.${kosten} Is er geen baan meer vrij? Laat het de anderen weten.\n\nGeboekt? Druk bij de partij op de site op "Baan is geboekt" en plak daar eventueel je Tikkie (of andere betaallink). De anderen krijgen dan een mail dat de baan geboekt is, met de Tikkie erin; je hebt hun nummers niet nodig. Ook zonder Tikkie krijgen ze die mail.`
         : `${boeker.naam} boekt de baan.${kosten}`) +
       `\n\nKun je toch niet? Meld je dan af op de site, dan zoeken we een vervanger.`,
     knoppen: s.id === boeker.id ? [{ label: `Boek bij ${club.naam}`, url: club.boeken }, { label: "Naar de Padelplanner", url: `${siteUrl()}/?tab=planning` }] : [{ label: "Naar de Padelplanner", url: `${siteUrl()}/?tab=planning` }],
@@ -203,9 +203,11 @@ async function nodigUit(ctx: Context, p: Partij, s: Speler, mails: Mail[]) {
   p.rijen = [...p.rijen.filter((r) => r.spelerId !== s.id), rij];
 }
 
-async function werkBij(ctx: Context, p: Partij, mails: Mail[]) {
+// `laatste`: de speler die net bevestigde. Maakt die de partij compleet, dan boekt die meteen de baan.
+// Geeft true terug als `laatste` daardoor de boeker is geworden.
+async function werkBij(ctx: Context, p: Partij, mails: Mail[], laatste?: number): Promise<boolean> {
   const start = nlMoment(p.datum, p.tijd);
-  if (start < Date.now()) return;
+  if (start < Date.now()) return false;
   const spelend = spelendVan(p);
 
   // Aanvullen tot vier (niet meer in de laatste 3 uur voor de partij).
@@ -231,17 +233,31 @@ async function werkBij(ctx: Context, p: Partij, mails: Mail[]) {
   const vierRijen = spelendVan(p).slice(0, MAX_SPELERS);
   if (!p.compleetGemeld && vierRijen.length === MAX_SPELERS && vierRijen.every((r) => r.status === "bevestigd")) {
     const vier = vierRijen.map((r) => spelerVan(ctx, r.spelerId)).filter(Boolean) as Speler[];
-    let boeker = vier.find((s) => s.id === p.boekerId);
+    // Bleef wie al boekte in de partij, dan blijft die boeken (de baan kan al geboekt zijn).
+    // Anders boekt wie de partij net compleet maakte, zodat er niet nog op iemand anders gewacht hoeft te worden.
+    let boeker = vier.find((s) => s.id === p.boekerId) ?? vier.find((s) => s.id === laatste);
     if (!boeker) {
       // Wie het minst vaak heeft geboekt, boekt nu (zo rouleert het).
       const keer = (s: Speler) => ctx.partijen.filter((q) => q.boekerId === s.id).length;
       boeker = vier.slice().sort((a, b) => keer(a) - keer(b) || a.id - b.id)[0];
     }
-    await db.update(partijen).set({ compleetGemeld: true, boekerId: boeker.id }).where(eq(partijen.id, p.id));
+    // Alleen als niemand anders de partij intussen al compleet heeft gemeld (twee spelers die tegelijk bevestigen).
+    const gelukt = await db
+      .update(partijen)
+      .set({ compleetGemeld: true, boekerId: boeker.id })
+      .where(and(eq(partijen.id, p.id), eq(partijen.compleetGemeld, false)))
+      .returning({ id: partijen.id });
+    if (!gelukt.length) {
+      const [nu] = await db.select().from(partijen).where(eq(partijen.id, p.id));
+      if (nu) Object.assign(p, { compleetGemeld: nu.compleetGemeld, boekerId: nu.boekerId });
+      return false;
+    }
     p.compleetGemeld = true;
     p.boekerId = boeker.id;
-    mails.push(...gaatDoor(ctx, p, vier, boeker));
+    mails.push(...gaatDoor(ctx, p, vier, boeker, laatste));
+    return boeker.id === laatste;
   }
+  return false;
 }
 
 // ---- Baan geboekt / betaallink (Tikkie) delen ----
@@ -284,7 +300,7 @@ export async function meldGeboekt(partijId: number, soort: "geboekt" | "betaalli
 }
 
 // ---- Antwoorden op een uitnodiging (via de e-mail of op de site) ----
-export type Antwoord = { ok: true; tekst: string } | { ok: false; fout: string; status?: number };
+export type Antwoord = { ok: true; tekst: string; boeken?: { club: string; url: string } } | { ok: false; fout: string; status?: number };
 
 export async function beantwoord(partijId: number, spelerId: number, ja: boolean): Promise<Antwoord> {
   const ctx = await laad();
@@ -348,8 +364,25 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
       }
     }
   }
-  await werkBij(ctx, p, mails);
+  // Opnieuw ophalen: bevestigde een andere speler net tegelijk, dan telt die ook mee.
+  const [vers] = await db.select().from(partijen).where(eq(partijen.id, p.id));
+  if (vers) Object.assign(p, { compleetGemeld: vers.compleetGemeld, boekerId: vers.boekerId });
+  p.rijen = await db.select().from(partijDeelnemers).where(eq(partijDeelnemers.partijId, p.id));
+  const ikBoek = await werkBij(ctx, p, mails, ja ? s.id : undefined);
   await verstuur(mails);
+  if (ikBoek) {
+    const club = clubVan(ctx, p.clubId);
+    return {
+      ok: true,
+      tekst: `Je bent de vierde, de partij gaat door! Jij boekt de baan: doe dat nu meteen bij ${club.naam}. Geboekt? Druk daarna op de site bij de partij op "Baan is geboekt" en plak eventueel je Tikkie.`,
+      boeken: { club: club.naam, url: club.boeken },
+    };
+  }
+  // Meedoen in een partij die (nu) compleet is, maar iemand anders boekt: zeg dat er meteen bij.
+  if (ja && p.compleetGemeld && spelendVan(p).slice(0, MAX_SPELERS).some((r) => r.spelerId === s.id)) {
+    const boeker = spelerVan(ctx, p.boekerId);
+    if (boeker && boeker.id !== s.id) tekst = `Je doet mee en de partij is compleet, dus hij gaat door! ${boeker.naam} boekt de baan.`;
+  }
   return { ok: true, tekst };
 }
 
