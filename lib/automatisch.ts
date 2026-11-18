@@ -103,14 +103,16 @@ function kanOp(s: Speler, datum: string, tijd: string, duur: number) {
   return P.vrijVanaf(tijden, naarMin(tijd)) >= duur;
 }
 const nivPast = (a: Speler, b: Speler) => P.wilMet(a.wensNiveaus, b.niveau) && P.wilMet(b.wensNiveaus, a.niveau);
-const overlapt = (a: Partij, datum: string, tijd: string, duur: number) =>
-  a.datum === datum && naarMin(a.tijd) < naarMin(tijd) + duur && naarMin(tijd) < naarMin(a.tijd) + a.duur;
+// Staat iemand op deze dag al bij een andere partij (uitgenodigd, speler of reserve)?
+const speeltAlOpDag = (ctx: Context, spelerId: number, datum: string, behalve?: number) =>
+  ctx.partijen.some((q) => q.id !== behalve && q.datum === datum && q.rijen.some((r) => r.spelerId === spelerId && isActief(r)));
 
 // Hoe vaak iemand per week wil spelen. "Om de week": niet als er de week ervoor of erna al een partij is.
 function heeftRuimte(ctx: Context, s: Speler, datum: string, behalve?: number) {
   const mijn = ctx.partijen.filter((p) => p.id !== behalve && p.rijen.some((r) => r.spelerId === s.id && isActief(r)));
   const week = maandag(datum);
   const dezeWeek = mijn.filter((p) => maandag(p.datum) === week).length;
+  if (s.frequentie === "3x-per-week") return dezeWeek < 3;
   if (s.frequentie === "2x-per-week") return dezeWeek < 2;
   if (s.frequentie === "tweewekelijks") {
     const rond = mijn.filter((p) => Math.abs(utc(maandag(p.datum)) - utc(week)) <= 7 * 86400000).length;
@@ -124,12 +126,12 @@ function pastBij(ctx: Context, s: Speler, p: { id?: number; datum: string; tijd:
   if (!kanOp(s, p.datum, p.tijd, p.duur)) return false;
   if (!groep.every((g) => nivPast(s, g))) return false;
   if (!heeftRuimte(ctx, s, p.datum, p.id)) return false;
-  // Niet tegelijk in een andere partij, en niet opnieuw vragen op een dag waarop iemand al heeft afgezegd.
+  // Nooit twee partijen op dezelfde dag, en niet opnieuw vragen op een dag waarop iemand al heeft afgezegd.
+  if (speeltAlOpDag(ctx, s.id, p.datum, p.id)) return false;
   for (const q of ctx.partijen) {
     if (q.id === p.id) continue;
     const r = q.rijen.find((x) => x.spelerId === s.id);
     if (!r) continue;
-    if (isActief(r) && overlapt(q, p.datum, p.tijd, p.duur)) return false;
     if (!isActief(r) && q.datum === p.datum && q.automatisch) return false;
   }
   return true;
@@ -330,6 +332,7 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
       rij.status = "bevestigd";
       tekst = "Top, je doet mee! Zodra alle vier spelers hebben bevestigd, krijg je een mail wie de baan boekt.";
     } else {
+      if (speeltAlOpDag(ctx, s.id, p.datum, p.id)) return { ok: false, fout: "Je staat die dag al bij een andere partij. Je kunt maar één keer per dag spelen.", status: 409 };
       // Zelf opgeven (of terugkomen na een afzegging): achteraan, dus reserve als er al vier zijn.
       const nu = new Date();
       const waarden = { status: "bevestigd", aangemeld: nu, token: rij?.token ?? null };

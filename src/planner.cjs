@@ -81,7 +81,8 @@
     { id: 'wanneer-het-lukt', label: 'Wanneer het lukt' },
     { id: 'tweewekelijks', label: 'Om de week' },
     { id: 'wekelijks', label: 'Iedere week' },
-    { id: '2x-per-week', label: '2x per week' }
+    { id: '2x-per-week', label: '2x per week' },
+    { id: '3x-per-week', label: '3x per week' }
   ];
   const VOORKEUREN = [
     { id: 'wel', label: 'Wel' },
