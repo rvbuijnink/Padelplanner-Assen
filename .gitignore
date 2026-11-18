@@ -1,3 +1,4 @@
 node_modules/
 .netlify/
 public/auth.js
+public/planner.js
