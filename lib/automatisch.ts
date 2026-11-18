@@ -106,6 +106,15 @@ const nivPast = (a: Speler, b: Speler) => P.wilMet(a.wensNiveaus, b.niveau) && P
 // Staat iemand op deze dag al bij een andere partij (uitgenodigd, speler of reserve)?
 const speeltAlOpDag = (ctx: Context, spelerId: number, datum: string, behalve?: number) =>
   ctx.partijen.some((q) => q.id !== behalve && q.datum === datum && q.rijen.some((r) => r.spelerId === spelerId && isActief(r)));
+// Wil iemand rustdagen tussen partijen? Dan niet inplannen als er binnen dat aantal dagen al een partij is.
+const DAG = 86400000;
+const teDichtBij = (ctx: Context, s: Speler, datum: string, behalve?: number) => {
+  const rust = Math.max(0, Math.min(2, s.rustDagen ?? 0));
+  if (!rust) return false;
+  return ctx.partijen.some(
+    (q) => q.id !== behalve && Math.abs(utc(q.datum) - utc(datum)) <= rust * DAG && q.rijen.some((r) => r.spelerId === s.id && isActief(r))
+  );
+};
 
 // Hoe vaak iemand per week wil spelen. "Om de week": niet als er de week ervoor of erna al een partij is.
 function heeftRuimte(ctx: Context, s: Speler, datum: string, behalve?: number) {
@@ -128,6 +137,8 @@ function pastBij(ctx: Context, s: Speler, p: { id?: number; datum: string; tijd:
   if (!heeftRuimte(ctx, s, p.datum, p.id)) return false;
   // Nooit twee partijen op dezelfde dag, en niet opnieuw vragen op een dag waarop iemand al heeft afgezegd.
   if (speeltAlOpDag(ctx, s.id, p.datum, p.id)) return false;
+  // Minimaal aantal vrije dagen tussen twee partijen, zoals de speler heeft aangegeven.
+  if (teDichtBij(ctx, s, p.datum, p.id)) return false;
   for (const q of ctx.partijen) {
     if (q.id === p.id) continue;
     const r = q.rijen.find((x) => x.spelerId === s.id);

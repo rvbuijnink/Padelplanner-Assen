@@ -12,6 +12,8 @@ export const spelers = pgTable("spelers", {
   wensNiveaus: jsonb("wens_niveaus").$type<string[]>().notNull(),
   duren: jsonb().$type<string[]>().notNull(),
   frequentie: text().notNull(),
+  // Minimaal aantal vrije dagen tussen twee partijen: 0 (maakt niet uit, wel nooit twee op één dag), 1 of 2.
+  rustDagen: integer("rust_dagen").notNull().default(0),
   // clubId -> "graag" | "prima" | "niet"
   clubVoorkeur: jsonb("club_voorkeur").$type<Record<string, string>>().notNull().default({}),
   // E-mailadres van het account (overgenomen bij inloggen) en of de speler e-mails wil krijgen.

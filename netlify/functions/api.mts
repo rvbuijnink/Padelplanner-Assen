@@ -135,6 +135,7 @@ async function alleSpelers(user: Gebruiker, beheer: boolean) {
       wensNiveaus: s.wensNiveaus,
       duren: s.duren,
       frequentie: s.frequentie,
+      rustDagen: s.rustDagen,
       clubVoorkeur: s.clubVoorkeur,
       ...(isIk ? { mailAan: s.mailAan, email: s.email } : {}),
       bijgewerkt: s.bijgewerkt.toISOString(),
@@ -267,6 +268,8 @@ async function slaProfielOp(user: Gebruiker, b: any) {
   if (!Array.isArray(b.duren) || !b.duren.length || !b.duren.every((x: string) => DUREN.includes(x)))
     return fout("Kies minstens één speelduur.");
   if (!FREQ.includes(b.frequentie)) return fout("Kies hoe vaak je wilt spelen.");
+  const rustDagen = b.rustDagen === undefined ? 0 : Number(b.rustDagen);
+  if (![0, 1, 2].includes(rustDagen)) return fout("Kies hoeveel tijd je minimaal wilt tussen twee partijen.");
 
   const clubVoorkeur: Record<string, string> = {};
   for (const c of CLUBS) {
@@ -282,6 +285,7 @@ async function slaProfielOp(user: Gebruiker, b: any) {
     wensNiveaus,
     duren: [...new Set<string>(b.duren)],
     frequentie: b.frequentie,
+    rustDagen,
     clubVoorkeur,
     email: user.email ?? null,
     mailAan: b.mailAan !== false,
