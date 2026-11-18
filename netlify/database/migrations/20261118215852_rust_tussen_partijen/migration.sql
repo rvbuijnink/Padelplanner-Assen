@@ -1,0 +1,1 @@
+ALTER TABLE "spelers" ADD COLUMN "rust_dagen" integer DEFAULT 0 NOT NULL;

@@ -327,6 +327,15 @@
           <select id="frequentie"></select>
         </fieldset>
         <fieldset>
+          <legend>Hoeveel tijd wil je minimaal tussen 2 partijen?</legend>
+          <select id="rust-dagen">
+            <option value="0">0 dagen (maakt niet uit)</option>
+            <option value="1">1 dag</option>
+            <option value="2">2 dagen</option>
+          </select>
+          <p class="hint">Er worden geen 2 partijen op 1 dag gepland. Bij 1 dag zit er minstens één dag zonder partij tussen (bijv. maandag en woensdag), bij 2 dagen minstens twee.</p>
+        </fieldset>
+        <fieldset>
           <legend>Baanvoorkeur: waar wil je wel of niet spelen?</legend>
           <p class="hint">Bij "Niet" plant de planner je nooit bij die club in. Bij buitenbanen kun je ook "Alleen lente en zomer" kiezen: dan telt die club alleen van 21 maart t/m 22 september mee.</p>
           <div class="scroll"><table class="voorkeur" id="voorkeur"></table></div>
@@ -545,6 +554,7 @@
     toonWens();
     document.querySelectorAll('input[name=duur]').forEach((i) => (i.checked = !!r && r.duren.includes(i.value)));
     $('frequentie').value = r ? r.frequentie : 'wanneer-het-lukt';
+    $('rust-dagen').value = String(r && r.rustDagen ? r.rustDagen : 0);
     $('mail-aan').checked = !r || r.mailAan !== false;
     clubs.forEach((c) => {
       const v = r ? P.voorkeurVan(r, c.id) : 'wel';
@@ -1198,7 +1208,7 @@
     try {
       const r = await fetch('/api/profiel', {
         method: 'PUT', headers: headers({ 'content-type': 'application/json' }),
-        body: JSON.stringify({ naam, niveau, wensNiveaus, duren, frequentie: $('frequentie').value, clubVoorkeur, mailAan: $('mail-aan').checked })
+        body: JSON.stringify({ naam, niveau, wensNiveaus, duren, frequentie: $('frequentie').value, rustDagen: Number($('rust-dagen').value), clubVoorkeur, mailAan: $('mail-aan').checked })
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');
