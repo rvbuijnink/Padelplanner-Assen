@@ -115,8 +115,8 @@
   .moment { border:1px solid var(--lijn); border-left:4px solid var(--goed); border-radius:12px; padding:14px 16px; margin-bottom:12px; background:var(--veld); }
   .moment h3 { margin:0 0 4px; font-size:1.05rem; }
   .moment ul { margin:6px 0 0; padding-left:18px; }
-  .moment details, #zelf-plannen { margin-top:10px; }
-  .moment summary, #zelf-plannen summary { cursor:pointer; color:var(--accent); font-weight:600; }
+  .moment details { margin-top:10px; }
+  .moment summary { cursor:pointer; color:var(--accent); font-weight:600; }
   .planform { margin-top:8px; }
   .badge { display:inline-block; font-size:.72rem; font-weight:600; padding:2px 9px; border-radius:99px; background:color-mix(in srgb, var(--goed) 14%, transparent); color:var(--goed); margin-left:6px; vertical-align:middle; }
   .let { color:var(--let); }
@@ -376,11 +376,6 @@
       <p class="melding" id="partijen-info" role="status"></p>
       <div id="partijen"></div>
       <button type="button" class="rustig" id="ververs">Vernieuw</button>
-      <details id="zelf-plannen">
-        <summary><strong>Zelf een partij plannen</strong></summary>
-        <p class="hint">Je staat er zelf meteen bij. De site nodigt daarna per e-mail passende spelers uit tot er vier zijn.</p>
-        <div id="zelf-plannen-form"></div>
-      </details>
       <div class="uitleg" style="margin:14px 0 0">
         <ol class="stappen">
           <li><span class="nr">1.</span><div><strong>De site zoekt een match.</strong> De site plant een partij zodra aan al deze voorwaarden is voldaan:
@@ -426,7 +421,7 @@
     </section>
     <section>
       <h2>Beste momenten</h2>
-      <p class="hint">Alleen voor de beheerder. Momenten waarop vier passende spelers kunnen, met live vrije banen. De site plant deze momenten zelf in; hier kun je ook zelf een extra partij vastzetten. Vul bovenaan dit tabblad de beheercode in en klik op <em>Toon beste momenten</em>.</p>
+      <p class="hint">Alleen voor de beheerder. Momenten waarop vier passende spelers kunnen, met live vrije banen. De site plant deze momenten zelf in. Vul bovenaan dit tabblad de beheercode in en klik op <em>Toon beste momenten</em>.</p>
       <button type="button" class="rustig" id="toon-beste">Toon beste momenten</button>
       <p class="hint" id="planner-info"></p>
       <div id="planner"></div>
@@ -923,40 +918,6 @@
         h('div', { class: 'boekrij' }, knoppen), melding);
     }));
   }
-  // Formulier om een partij vast te zetten: dag (optioneel vast), starttijd, speelduur en club.
-  function planFormulier(o) {
-    const melding = h('div', { class: 'melding', role: 'status' });
-    const dagSel = o.datum ? null : h('select', {}, planDagen.map((d) => h('option', { value: d }, dagLabel(d))));
-    const tijdSel = h('select', {});
-    const duurSel = h('select', {}, (o.duren || ['60', '90']).map((d) => h('option', { value: d }, duurLabel(d))));
-    const clubSel = h('select', {}, (o.clubs || clubs).map((c) => h('option', { value: c.id }, c.naam)));
-    const van = o.van != null ? o.van : P.DAG_VAN, tot = o.tot != null ? o.tot : P.DAG_TOT;
-    function vulTijden() {
-      const keuze = tijdSel.value || o.tijd;
-      const opties = [];
-      for (let t = van; t + Number(duurSel.value) <= tot; t += 30) opties.push(P.naarTijd(t));
-      tijdSel.replaceChildren(...opties.map((t) => h('option', { value: t }, t)));
-      if (keuze && opties.includes(keuze)) tijdSel.value = keuze;
-    }
-    if (o.duur) duurSel.value = String(o.duur);
-    if (o.clubId) clubSel.value = o.clubId;
-    vulTijden();
-    duurSel.addEventListener('change', vulTijden);
-    const knop = h('button', { type: 'button' }, 'Plan deze partij');
-    knop.addEventListener('click', async () => {
-      if (!ik()) { melding.textContent = 'Sla eerst je vaste instellingen op.'; melding.className = 'melding fout'; return; }
-      if (!tijdSel.value) { melding.textContent = 'Er past geen starttijd in deze tijd.'; melding.className = 'melding fout'; return; }
-      knop.disabled = true;
-      const ok = await partijActie('', { datum: o.datum || dagSel.value, tijd: tijdSel.value, duur: duurSel.value, clubId: clubSel.value }, melding);
-      knop.disabled = false;
-      if (ok) { melding.textContent = 'Gepland en je staat erbij. Passende spelers krijgen nu een uitnodiging per e-mail. Je ziet de partij op het tabblad Geplande partijen.'; melding.className = 'melding ok'; }
-    });
-    const veld = (label, el) => h('div', {}, h('label', {}, h('strong', {}, label), el));
-    return h('div', { class: 'planform' },
-      h('div', { class: 'rij' }, dagSel ? veld('Dag', dagSel) : null, veld('Starttijd', tijdSel), veld('Speelduur', duurSel), veld('Club', clubSel)),
-      h('div', { class: 'knoppen' }, knop), melding);
-  }
-  function toonZelfPlannen() { $('zelf-plannen-form').replaceChildren(planFormulier({})); }
 
   // ---- Prijstekst ----
   function prijsTekst(club, dag, slot) {
@@ -1065,22 +1026,11 @@
                    : [statusTekst(o.club, o.status), ' – ', prijsTekst(o.club, m.datum, m.slot.id), h('div', { class: 'boekrij' }, boekKnop(o.club, o.status))],
               o.club.opmerking ? h('div', { class: 'hint' }, o.club.opmerking) : null)))
           : h('div', { class: 'let' }, 'Geen club met een boekbare baan waar dit viertal wil spelen.'),
-        h('div', { class: 'boekrij' }, h('a', { class: 'knop rustig', href: padelcheckerUrl, target: '_blank', rel: 'noopener' }, 'Vergelijk vrije banen op Padelchecker ↗')),
-        momentPlannen(m)));
+        h('div', { class: 'boekrij' }, h('a', { class: 'knop rustig', href: padelcheckerUrl, target: '_blank', rel: 'noopener' }, 'Vergelijk vrije banen op Padelchecker ↗'))));
     });
     const liveNamen = clubs.filter((c) => c.live).map((c) => c.naam);
     const andere = clubs.filter((c) => !c.live).map((c) => c.naam);
     box.append(h('p', { class: 'hint' }, 'Live: ' + (liveNamen.length > 1 ? liveNamen.slice(0, -1).join(', ') + ' en ' + liveNamen.slice(-1) : liveNamen.join('')) + ' (dubbelbanen, ververst elke 10 minuten).' + (andere.length ? ' Bij ' + andere.join(' en ') + ' gebruik je de boekknop of Padelchecker.' : '')));
-  }
-
-  // "Plan deze partij" bij een moment: voorgevuld met de eerste live vrije tijd als die er is.
-  function momentPlannen(m) {
-    const vrij = m.opties.find((o) => o.lv && o.lv.soort === 'vrij');
-    const eerste = vrij ? vrij.lv.tijden[0] : null;
-    const clubsHier = m.opties.length ? m.opties.map((o) => o.club) : clubs;
-    return h('details', {}, h('summary', {}, 'Plan deze partij'),
-      planFormulier({ datum: m.datum, van: P.naarMin(m.slot.van), tot: P.naarMin(m.slot.tot), duren: m.duren,
-        clubs: clubsHier, clubId: vrij ? vrij.club.id : clubsHier[0] && clubsHier[0].id, tijd: eerste && eerste.tijd, duur: eerste && eerste.duur }));
   }
 
   // ---- Banenoverzicht ----
@@ -1229,7 +1179,7 @@
     $('nieuw-wachtwoord-uitleg').textContent = uitleg;
   }
 
-  function toonAlles() { toonWie(); toonWeken(); toonRaster(); toonPartijen(); toonZelfPlannen(); toonPlanner(); toonBanen(); }
+  function toonAlles() { toonWie(); toonWeken(); toonRaster(); toonPartijen(); toonPlanner(); toonBanen(); }
 
   // ---- Vaste instellingen opslaan ----
   $('profiel').addEventListener('submit', async (e) => {

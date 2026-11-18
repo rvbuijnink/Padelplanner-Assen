@@ -7,7 +7,6 @@
 // PUT /api/clubs             -> clubgegevens van één club opslaan (beheercode nodig als BEHEER_CODE is ingesteld)
 // GET /api/overzicht         -> wie heeft welke week ingevuld (alleen beheerder, beheercode nodig)
 // GET /api/partijen          -> komende geplande partijen: je eigen partijen, of alle partijen voor de beheerder (ingelogd)
-// POST /api/partijen         -> nieuwe partij plannen; je geeft je daarmee zelf op (ingelogd)
 // POST /api/partijen/aanmelden | /afmelden | /verwijderen | /geboekt | /nietgeboekt  { id } (ingelogd)
 // POST /api/partijen/geboekt { id, link? } -> baan geboekt; de anderen krijgen een mail (met Tikkie als die er is)
 // POST /api/partijen/betaallink { id, link }  -> wie boekt deelt (later) een Tikkie; de anderen krijgen die per mail
@@ -17,7 +16,7 @@
 import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { getUser, verifyRequestOrigin, AuthError } from "@netlify/identity";
 import { db } from "../../db/index.js";
-import { beantwoord, werkPartijBij, meldGeboekt, zoekUitnodiging, spelendVan, isActief } from "../../lib/automatisch.js";
+import { beantwoord, meldGeboekt, zoekUitnodiging, spelendVan, isActief } from "../../lib/automatisch.js";
 import { spelers, beschikbaarheid, clubGegevens, partijen, partijDeelnemers } from "../../db/schema.js";
 
 // Met welk niveau je wilt spelen: één range van-tot, opgeslagen als ["8.0-9.2"].
@@ -63,7 +62,7 @@ function leesTijden(lijst: unknown[]): string[] | null {
   }
   return out.map(([a, b]) => hhmm(a) + "-" + hhmm(b));
 }
-const FREQ = ["wanneer-het-lukt", "tweewekelijks", "wekelijks", "2x-per-week"];
+const FREQ = ["wanneer-het-lukt", "tweewekelijks", "wekelijks", "2x-per-week", "3x-per-week"];
 const CLUBS = ["peakz", "valley", "plaza", "rolde", "hertenkamp"];
 // "zomer" (alleen lente en zomer) kan alleen bij buitenbanen.
 const BUITEN = ["hertenkamp"];
@@ -202,30 +201,6 @@ async function allePartijen(user: Gebruiker, beheer: boolean) {
       reserves: actief.slice(MAX_SPELERS).map(toon),
     };
   });
-}
-
-async function maakPartij(user: Gebruiker, b: any) {
-  const mij = await mijnSpeler(user);
-  if (!mij) return fout("Sla eerst je vaste instellingen op.", 404);
-  const datum = b.datum;
-  if (typeof datum !== "string" || !DATUM.test(datum)) return fout("Ongeldige datum.");
-  const tot = dagenTussen(vandaag(), datum);
-  if (tot < 0) return fout("Deze dag is al voorbij.");
-  if (tot > MAX_WEKEN_VOORUIT * 7 + 7) return fout("Deze dag ligt te ver vooruit.");
-  if (typeof b.tijd !== "string" || !/^([01]\d|2[0-3]):(00|30)$/.test(b.tijd)) return fout("Kies een starttijd.");
-  const duur = Number(b.duur);
-  if (duur !== 60 && duur !== 90) return fout("Kies een speelduur.");
-  if (!CLUBS.includes(b.clubId)) return fout("Kies een club.");
-  const opmerking = typeof b.opmerking === "string" ? b.opmerking.trim().slice(0, 200) : "";
-  // Standaard vult de site de partij zelf aan door passende spelers per e-mail uit te nodigen.
-  const automatisch = b.automatisch !== false;
-  const [p] = await db
-    .insert(partijen)
-    .values({ datum, tijd: b.tijd, duur, clubId: b.clubId, opmerking, aangemaaktDoor: mij.id, automatisch })
-    .returning({ id: partijen.id });
-  await db.insert(partijDeelnemers).values({ partijId: p.id, spelerId: mij.id, status: "bevestigd" });
-  if (automatisch) await werkPartijBij(p.id);
-  return json({ ok: true, id: p.id });
 }
 
 async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = false) {
@@ -455,7 +430,6 @@ export default async (req: Request) => {
     if (pad === "/api/profiel" && schrijven) return await slaProfielOp(user, await leesBody(req));
     if (pad === "/api/beschikbaarheid" && schrijven) return await slaBeschikbaarheidOp(user, await leesBody(req));
     if (pad === "/api/partijen" && req.method === "GET") return (async () => { const beheer = isBeheer(req); return json({ partijen: await allePartijen(user, beheer), beheer }); })();
-    if (pad === "/api/partijen" && req.method === "POST") return await maakPartij(user, await leesBody(req));
     const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|betaald|nietbetaald)$/.exec(pad);
     if (m && req.method === "POST") return await wijzigPartij(user, m[1], await leesBody(req), isBeheer(req));
     return fout("Niet gevonden.", 404);
