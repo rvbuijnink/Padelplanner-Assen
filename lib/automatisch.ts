@@ -313,18 +313,7 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
   let tekst: string;
 
   if (ja) {
-    if (rij?.status === "bevestigd") {
-      // Klikt wie boekt nog een keer (bijv. opnieuw via de mail): laat de boekknop dan weer zien.
-      if (p.compleetGemeld && p.boekerId === s.id && !p.geboekt) {
-        const club = clubVan(ctx, p.clubId);
-        return {
-          ok: true,
-          tekst: `Je had al bevestigd en jij boekt de baan. Nog niet gedaan? Boek nu bij ${club.naam}. Geboekt? Druk daarna op de site bij de partij op "Baan is geboekt" en plak eventueel je Tikkie.`,
-          boeken: { club: club.naam, url: club.boeken },
-        };
-      }
-      return { ok: true, tekst: "Je had al bevestigd. Tot dan!" };
-    }
+    if (rij?.status === "bevestigd") return { ok: true, tekst: "Je had al bevestigd. Tot dan!" };
     if (rij?.status === "uitgenodigd") {
       await db.update(partijDeelnemers).set({ status: "bevestigd" }).where(and(eq(partijDeelnemers.partijId, p.id), eq(partijDeelnemers.spelerId, s.id)));
       rij.status = "bevestigd";
