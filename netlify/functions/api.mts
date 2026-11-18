@@ -237,7 +237,7 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
   if (!p || dagenTussen(vandaag(), p.datum) < 0) return fout("Deze partij bestaat niet (meer).", 404);
   if (actie === "aanmelden" || actie === "afmelden") {
     const r = await beantwoord(id, mij.id, actie === "aanmelden");
-    return r.ok ? json({ ok: true, tekst: r.tekst }) : fout(r.fout, r.status);
+    return r.ok ? json({ ok: true, tekst: r.tekst, boeken: r.boeken }) : fout(r.fout, r.status);
   } else if (actie === "geboekt" || actie === "nietgeboekt" || actie === "betaallink") {
     if (p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de beheerder) kan dit aanpassen.", 403);
     if (actie === "nietgeboekt") {
@@ -428,7 +428,7 @@ async function antwoord(req: Request) {
   if (!r) return fout("Deze link klopt niet (meer).", 404);
   if (b.a !== "ja" && b.a !== "nee") return fout("Kies ja of nee.");
   const uit = await beantwoord(r.partijId, r.spelerId, b.a === "ja");
-  return uit.ok ? json({ ok: true, tekst: uit.tekst }) : fout(uit.fout, uit.status);
+  return uit.ok ? json({ ok: true, tekst: uit.tekst, boeken: uit.boeken }) : fout(uit.fout, uit.status);
 }
 
 export default async (req: Request) => {

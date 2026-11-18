@@ -60,16 +60,18 @@
   const lijst = el('ul');
   info.spelers.forEach((s) => lijst.append(el('li', null, s.naam + (s.status === 'uitgenodigd' ? ' (nog geen antwoord)' : ' ✓'))));
   const melding = el('div', 'melding');
+  const laatste = info.status === 'uitgenodigd' && info.spelers.length === 4 && info.spelers.filter((s) => s.status === 'bevestigd').length === 3;
   const ja = el('button', 'ja', 'Ik doe mee'), nee = el('button', 'nee', 'Kan toch niet');
   if (keuze === 'ja') ja.classList.add('gekozen');
   if (keuze === 'nee') nee.classList.add('gekozen');
-  kaart.replaceChildren(
+  kaart.replaceChildren(...[
     el('h1', null, 'Hoi ' + info.naam + ', doe je mee?'),
     el('p', null, dag(p.datum) + ' van ' + p.tijd + ' tot ' + eind(p.tijd, p.duur) + (club ? ' bij ' + club.naam : '')),
     el('p', 'zacht', 'Spelers:'), lijst,
     el('p', info.status === 'verlopen' ? 'let' : 'zacht', statusTekst),
+    laatste ? el('p', 'let', 'De andere drie hebben al bevestigd. Doe je mee, dan ben jij de vierde en boek je meteen de baan' + (club ? ' bij ' + club.naam : '') + '.') : null,
     info.voorbij ? el('p', 'fout', 'Deze partij is al voorbij.') : el('div', 'knoppen'),
-    melding);
+    melding].filter(Boolean));
   if (info.voorbij) return;
   if (keuze) melding.replaceChildren(el('span', 'zacht', 'Klik op de knop om je antwoord te bevestigen.'));
   kaart.querySelector('.knoppen').append(ja, nee);
@@ -80,6 +82,13 @@
       const d = await r.json();
       if (!r.ok) throw new Error(d.fout || 'Dat lukte niet.');
       melding.className = 'melding ok'; melding.textContent = d.tekst;
+      if (d.boeken && d.boeken.url) {
+        const boek = el('a', 'knop ja', 'Boek nu bij ' + d.boeken.club + ' ↗');
+        boek.href = d.boeken.url; boek.target = '_blank'; boek.rel = 'noopener';
+        const site = el('a', 'knop nee', 'Baan geboekt? Naar de Padelplanner'); site.href = '/?tab=planning';
+        const rij = el('div', 'knoppen'); rij.append(boek, site);
+        melding.append(rij);
+      }
       ja.classList.toggle('gekozen', a === 'ja'); nee.classList.toggle('gekozen', a === 'nee');
     } catch (e) { melding.className = 'melding fout'; melding.textContent = e.message; }
     ja.disabled = nee.disabled = false;
