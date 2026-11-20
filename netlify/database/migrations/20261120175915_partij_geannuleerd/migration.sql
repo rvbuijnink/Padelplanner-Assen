@@ -1,0 +1,1 @@
+ALTER TABLE "partijen" ADD COLUMN "geannuleerd" boolean DEFAULT false NOT NULL;

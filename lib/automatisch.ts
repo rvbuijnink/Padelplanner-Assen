@@ -2,6 +2,8 @@
 // - De site zoekt zelf momenten waarop vier passende spelers kunnen én er live een baan vrij is, en maakt daar een partij van.
 // - Die spelers krijgen een uitnodiging per e-mail met "Ik doe mee" / "Kan toch niet".
 // - Wie afzegt of niet op tijd reageert, wordt vervangen door de volgende speler die ook kan.
+// - Is er geen vervanger (en is de baan nog niet geboekt), dan wordt de partij geannuleerd en krijgen de anderen een mail.
+//   Wie afzegde of niet reageerde, wordt die dag niet meer ingepland; de anderen wel.
 // - Wie als vierde bevestigt, boekt meteen de baan (krijgt direct de boekknop); iedereen krijgt een mail dat de partij doorgaat.
 // Gebruikt door de geplande functie (elk uur) en door de API (direct na een antwoord).
 import { randomBytes } from "node:crypto";
@@ -110,6 +112,10 @@ const nivPast = (a: Speler, b: Speler) => P.wilMet(a.wensNiveaus, b.niveau) && P
 // Staat iemand op deze dag al bij een andere partij (uitgenodigd, speler of reserve)?
 const speeltAlOpDag = (ctx: Context, spelerId: number, datum: string, behalve?: number) =>
   ctx.partijen.some((q) => q.id !== behalve && q.datum === datum && q.rijen.some((r) => r.spelerId === spelerId && isActief(r)));
+// Heeft iemand op deze dag een uitnodiging afgeslagen of laten verlopen? Dan kan die die dag niet: niet opnieuw inplannen.
+const nietOpDag = (r: { status: string }) => r.status === "afgezegd" || r.status === "verlopen";
+const kanNietOpDag = (ctx: Context, spelerId: number, datum: string, behalve?: number) =>
+  ctx.partijen.some((q) => q.id !== behalve && q.datum === datum && q.rijen.some((r) => r.spelerId === spelerId && nietOpDag(r)));
 // Wil iemand rustdagen tussen partijen? Dan niet inplannen als er binnen dat aantal dagen al een partij is.
 const DAG = 86400000;
 const teDichtBij = (ctx: Context, s: Speler, datum: string, behalve?: number) => {
@@ -143,12 +149,8 @@ function pastBij(ctx: Context, s: Speler, p: { id?: number; datum: string; tijd:
   if (speeltAlOpDag(ctx, s.id, p.datum, p.id)) return false;
   // Minimaal aantal vrije dagen tussen twee partijen, zoals de speler heeft aangegeven.
   if (teDichtBij(ctx, s, p.datum, p.id)) return false;
-  for (const q of ctx.partijen) {
-    if (q.id === p.id) continue;
-    const r = q.rijen.find((x) => x.spelerId === s.id);
-    if (!r) continue;
-    if (!isActief(r) && q.datum === p.datum && q.automatisch) return false;
-  }
+  // Wie die dag al een partij afzegde of niet op tijd reageerde, kan die dag kennelijk niet (ook niet een half uur later).
+  if (kanNietOpDag(ctx, s.id, p.datum, p.id)) return false;
   return true;
 }
 
@@ -319,11 +321,50 @@ async function nodigUit(ctx: Context, p: Partij, s: Speler, mails: Mail[]) {
   p.rijen = [...p.rijen.filter((r) => r.spelerId !== s.id), rij];
 }
 
+// De partij gaat niet door. Wie nog meedeed (of reserve/uitgenodigd was) krijgt een mail en kan die dag opnieuw worden ingepland.
+// Wie afzegde of niet reageerde, blijft als "afgezegd"/"verlopen" bewaard en wordt die dag dus niet meer ingepland.
+async function annuleer(ctx: Context, p: Partij, mails: Mail[]) {
+  const gelukt = await db
+    .update(partijen)
+    .set({ geannuleerd: true, compleetGemeld: false })
+    .where(and(eq(partijen.id, p.id), eq(partijen.geannuleerd, false)))
+    .returning({ id: partijen.id });
+  p.geannuleerd = true;
+  if (!gelukt.length) return; // al geannuleerd (bijv. tegelijk door een ander verzoek)
+  const actief = spelendVan(p);
+  if (actief.length) {
+    await db
+      .update(partijDeelnemers)
+      .set({ status: "geannuleerd" })
+      .where(and(eq(partijDeelnemers.partijId, p.id), inArray(partijDeelnemers.status, ["uitgenodigd", "bevestigd"])));
+  }
+  for (const r of actief) r.status = "geannuleerd";
+  const weg = p.rijen.filter(nietOpDag).map((r) => spelerVan(ctx, r.spelerId)?.naam).filter(Boolean) as string[];
+  const boeker = spelerVan(ctx, p.boekerId);
+  for (const r of actief) {
+    const s = spelerVan(ctx, r.spelerId);
+    if (!kanMail(s)) continue;
+    mails.push({
+      aan: s.email!,
+      naam: s.naam,
+      onderwerp: `Geannuleerd: padel ${dagTekst(p.datum)} om ${p.tijd}`,
+      tekst:
+        `Hoi ${s.naam},\n\nDe partij van ${partijTekst(ctx, p)} gaat helaas niet door. ` +
+        (weg.length ? `${naamLijst(weg)} kon${weg.length > 1 ? "den" : ""} niet (of reageerde niet op tijd) en ` : "Er konden niet genoeg spelers en ") +
+        "er is geen andere speler gevonden die op dat moment kan.\n\n" +
+        (boeker && boeker.id === s.id ? "Had je de baan toch al geboekt? Annuleer hem dan bij de club.\n\n" : "") +
+        "Je beschikbaarheid blijft staan: kunnen er op een ander moment vier spelers, dan plannen we automatisch een nieuwe partij. " +
+        `Wie bij deze partij afzegde of niet reageerde, plannen we op ${dagTekst(p.datum)} niet meer in.`,
+      knoppen: [{ label: "Naar de Padelplanner", url: `${siteUrl()}/?tab=planning` }],
+    });
+  }
+}
+
 // `laatste`: de speler die net bevestigde. Maakt die de partij compleet, dan boekt die meteen de baan.
 // Geeft true terug als `laatste` daardoor de boeker is geworden.
 async function werkBij(ctx: Context, p: Partij, mails: Mail[], laatste?: number): Promise<boolean> {
   const start = nlMoment(p.datum, p.tijd);
-  if (start < Date.now()) return false;
+  if (start < Date.now() || p.geannuleerd) return false;
   const spelend = spelendVan(p);
 
   // Aanvullen tot vier (niet meer in de laatste 3 uur voor de partij).
@@ -343,6 +384,13 @@ async function werkBij(ctx: Context, p: Partij, mails: Mail[], laatste?: number)
       const m = uitnodiging(ctx, p, s, rij.token!);
       if (m) mails.push(m);
     }
+  }
+
+  // Geen vervanger te vinden (of te laat om nog te zoeken) en de baan is nog niet geboekt: de partij gaat niet door.
+  // Een geboekte baan wordt niet automatisch geannuleerd; dan zoeken de spelers zelf iemand.
+  if (p.automatisch && !p.geboekt && spelendVan(p).length < MAX_SPELERS && p.rijen.some(nietOpDag)) {
+    await annuleer(ctx, p, mails);
+    return false;
   }
 
   // Compleet: vier spelers hebben bevestigd.
@@ -423,10 +471,13 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
   const ctx = await laad();
   const p = ctx.partijen.find((x) => x.id === partijId);
   if (!p || nlMoment(p.datum, p.tijd) < Date.now()) return { ok: false, fout: "Deze partij bestaat niet meer of is al voorbij.", status: 404 };
+  if (p.geannuleerd) return ja ? { ok: false, fout: "Deze partij is geannuleerd: er konden niet genoeg spelers.", status: 409 } : { ok: true, tekst: "Deze partij was al geannuleerd." };
   const s = spelerVan(ctx, spelerId);
   if (!s) return { ok: false, fout: "Onbekende speler.", status: 404 };
   const rij = p.rijen.find((r) => r.spelerId === spelerId);
   const mails: Mail[] = [];
+  // "Kan toch niet"-mails aan de anderen; niet nodig als de partij daardoor wordt geannuleerd (dan krijgen ze die mail).
+  const afzegMails: Mail[] = [];
   let tekst: string;
 
   if (ja) {
@@ -448,6 +499,8 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
       tekst = "Top, je doet mee! Zodra alle vier spelers hebben bevestigd, krijg je een mail wie de baan boekt.";
     } else {
       if (speeltAlOpDag(ctx, s.id, p.datum, p.id)) return { ok: false, fout: "Je staat die dag al bij een andere partij. Je kunt maar één keer per dag spelen.", status: 409 };
+      if (p.automatisch && kanNietOpDag(ctx, s.id, p.datum, p.id))
+        return { ok: false, fout: "Je hebt die dag al een andere partij afgezegd of niet op tijd bevestigd, dus je wordt die dag niet meer ingepland.", status: 409 };
       // Zelf opgeven (of terugkomen na een afzegging): achteraan, dus reserve als er al vier zijn.
       const nu = new Date();
       const waarden = { status: "bevestigd", aangemeld: nu, token: rij?.token ?? null };
@@ -488,7 +541,7 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
       for (const r of spelendVan(p)) {
         const ander = spelerVan(ctx, r.spelerId);
         if (!kanMail(ander)) continue;
-        mails.push({
+        afzegMails.push({
           aan: ander.email!,
           naam: ander.naam,
           onderwerp: `${s.naam} kan toch niet op ${dagTekst(p.datum)}`,
@@ -509,7 +562,9 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
   if (vers) Object.assign(p, { compleetGemeld: vers.compleetGemeld, boekerId: vers.boekerId });
   p.rijen = await db.select().from(partijDeelnemers).where(eq(partijDeelnemers.partijId, p.id));
   const ikBoek = await werkBij(ctx, p, mails, ja ? s.id : undefined);
+  if (!p.geannuleerd) mails.unshift(...afzegMails);
   await verstuur(mails);
+  if (!ja && p.geannuleerd) tekst = "Je bent afgemeld. Er is geen vervanger gevonden, dus de partij is geannuleerd. De andere spelers krijgen een mail.";
   if (ikBoek) {
     const club = clubVan(ctx, p.clubId);
     return {
@@ -563,6 +618,18 @@ async function liveKeuze(datum: string, slot: any, duur: number, opties: any[]) 
   }
 }
 
+function zonderAfgezegdeDagen(ctx: Context, s: Speler, dagen: string[]): Speler {
+  const weg = dagen.filter((d) => kanNietOpDag(ctx, s.id, d));
+  if (!weg.length) return s;
+  const weken: Speler["weken"] = {};
+  for (const [w, v] of Object.entries(s.weken)) {
+    const tijdvakken = { ...v.tijdvakken };
+    for (const d of weg) delete tijdvakken[d];
+    weken[w] = { ...v, tijdvakken };
+  }
+  return { ...s, weken };
+}
+
 async function zoekNieuwePartijen(ctx: Context, mails: Mail[]) {
   // Niet wachten tot iedereen heeft ingevuld: zodra vier passende spelers op hetzelfde moment kunnen, wordt er gepland.
   // Maar alleen als er op dat moment ook echt een baan vrij is: anders worden er geen uitnodigingen verstuurd.
@@ -581,7 +648,8 @@ async function zoekNieuwePartijen(ctx: Context, mails: Mail[]) {
   for (const weekDagen of perWeek.values()) {
     while (gemaakt < MAX_NIEUW_PER_RUN && !genoegGezocht()) {
       // Alleen spelers die deze week nog willen spelen (volgens "hoe vaak").
-      const pool = ctx.spelers.filter((s) => heeftRuimte(ctx, s, weekDagen[0]));
+      // Dagen waarop iemand al een partij afzegde of niet bevestigde, tellen niet mee als beschikbaar.
+      const pool = ctx.spelers.filter((s) => heeftRuimte(ctx, s, weekDagen[0])).map((s) => zonderAfgezegdeDagen(ctx, s, weekDagen));
       if (pool.length < MAX_SPELERS) break;
       const kandidaten = P.plan(pool, ctx.clubs, vandaagDatum, 30, weekDagen);
       let gekozen: { k: any; groep: Speler[]; duur: number; clubId: string; tijd: string } | null = null;
@@ -634,7 +702,7 @@ export async function automatischPlannen() {
   let verlopen = 0;
 
   for (const p of ctx.partijen) {
-    if (nlMoment(p.datum, p.tijd) < nu) continue;
+    if (nlMoment(p.datum, p.tijd) < nu || p.geannuleerd) continue;
     for (const r of p.rijen) {
       if (r.status !== "uitgenodigd" || !r.uitgenodigd) continue;
       const tot = verlooptOp(r.uitgenodigd, p);
@@ -665,7 +733,7 @@ export async function zoekUitnodiging(token: string) {
 async function dagHerinneringen(ctx: Context, mails: Mail[]) {
   const nu = Date.now();
   for (const p of ctx.partijen) {
-    if (!p.compleetGemeld || p.dagHerinnerd) continue;
+    if (!p.compleetGemeld || p.dagHerinnerd || p.geannuleerd) continue;
     const start = nlMoment(p.datum, p.tijd);
     if (start <= nu || start - nu > 4 * UUR) continue;
     const vier = spelendVan(p).slice(0, MAX_SPELERS);

@@ -194,9 +194,10 @@ async function allePartijen(user: Gebruiker, beheer: boolean) {
   const alle = await db.select().from(partijen).where(gte(partijen.datum, vandaag())).orderBy(asc(partijen.datum), asc(partijen.tijd));
   const alleIds = alle.map((p) => p.id);
   const rijen = alleIds.length ? await db.select().from(partijDeelnemers).where(inArray(partijDeelnemers.partijId, alleIds)) : [];
+  // Geannuleerde partijen gaan niet door en worden niet meer getoond.
   const lijst = beheer
-    ? alle
-    : alle.filter((p) => !!mij && (p.aangemaaktDoor === mij.id || rijen.some((r) => r.partijId === p.id && r.spelerId === mij.id && isActief(r))));
+    ? alle.filter((p) => !p.geannuleerd)
+    : alle.filter((p) => !p.geannuleerd).filter((p) => !!mij && (p.aangemaaktDoor === mij.id || rijen.some((r) => r.partijId === p.id && r.spelerId === mij.id && isActief(r))));
   const namen = new Map((await db.select({ id: spelers.id, naam: spelers.naam }).from(spelers)).map((x) => [x.id, x.naam]));
   return lijst.map((p) => {
     const actief = spelendVan({ ...p, rijen: rijen.filter((r) => r.partijId === p.id) });
@@ -233,6 +234,7 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
   if (!Number.isInteger(id)) return fout("Onbekende partij.");
   const [p] = await db.select().from(partijen).where(eq(partijen.id, id));
   if (!p || dagenTussen(vandaag(), p.datum) < 0) return fout("Deze partij bestaat niet (meer).", 404);
+  if (p.geannuleerd) return fout("Deze partij is geannuleerd: er konden niet genoeg spelers.", 409);
   if (actie === "aanmelden" || actie === "afmelden") {
     const r = await beantwoord(id, mij.id, actie === "aanmelden");
     return r.ok ? json({ ok: true, tekst: r.tekst, boeken: r.boeken }) : fout(r.fout, r.status);
@@ -447,6 +449,7 @@ async function antwoord(req: Request) {
       status: r.status,
       reserve: isActief(r) && actief.findIndex((x) => x.spelerId === r.spelerId) >= MAX_SPELERS,
       voorbij: dagenTussen(vandaag(), p.datum) < 0,
+      geannuleerd: p.geannuleerd,
       partij: { datum: p.datum, tijd: p.tijd, duur: p.duur, clubId: p.clubId },
       spelers: actief.slice(0, MAX_SPELERS).map((x) => ({ naam: namen.get(x.spelerId) ?? "?", status: x.status })),
     });
