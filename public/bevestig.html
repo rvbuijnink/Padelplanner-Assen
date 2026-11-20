@@ -55,6 +55,7 @@
     uitgenodigd: 'Je hebt nog niet gereageerd.',
     bevestigd: info.reserve ? 'Je staat op de reservelijst.' : 'Je hebt bevestigd dat je meedoet.',
     afgezegd: 'Je hebt afgezegd.',
+    geannuleerd: 'Deze partij gaat niet door: er konden niet genoeg spelers.',
     verlopen: 'Je hebt niet op tijd gereageerd, dus je plek is aan iemand anders gegeven. Je kunt je nog wel opgeven; is de partij vol, dan kom je op de reservelijst.'
   }[info.status] || '';
   const lijst = el('ul');
@@ -70,9 +71,10 @@
     el('p', 'zacht', 'Spelers:'), lijst,
     el('p', info.status === 'verlopen' ? 'let' : 'zacht', statusTekst),
     laatste ? el('p', 'let', 'De andere drie hebben al bevestigd. Doe je mee, dan ben jij de vierde en boek je meteen de baan' + (club ? ' bij ' + club.naam : '') + '.') : null,
-    info.voorbij ? el('p', 'fout', 'Deze partij is al voorbij.') : el('div', 'knoppen'),
+    info.geannuleerd ? el('p', 'fout', 'Deze partij is geannuleerd: er konden niet genoeg spelers en er was geen vervanger.')
+      : info.voorbij ? el('p', 'fout', 'Deze partij is al voorbij.') : el('div', 'knoppen'),
     melding].filter(Boolean));
-  if (info.voorbij) return;
+  if (info.voorbij || info.geannuleerd) return;
   if (keuze) melding.replaceChildren(el('span', 'zacht', 'Klik op de knop om je antwoord te bevestigen.'));
   kaart.querySelector('.knoppen').append(ja, nee);
   async function stuur(a) {

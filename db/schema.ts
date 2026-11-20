@@ -78,6 +78,9 @@ export const partijen = pgTable("partijen", {
   betaallink: text(),
   // Of de herinnering op de dag van de partij al is verstuurd.
   dagHerinnerd: boolean("dag_herinnerd").notNull().default(false),
+  // Geannuleerd: er konden niet genoeg spelers en er was geen vervanger. De partij blijft bewaard,
+  // zodat wie afzegde of niet reageerde die dag niet opnieuw wordt ingepland.
+  geannuleerd: boolean().notNull().default(false),
   aangemaakt: timestamp("aangemaakt", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -88,7 +91,8 @@ export const partijDeelnemers = pgTable(
     partijId: integer("partij_id").notNull().references(() => partijen.id, { onDelete: "cascade" }),
     spelerId: integer("speler_id").notNull().references(() => spelers.id, { onDelete: "cascade" }),
     aangemeld: timestamp("aangemeld", { withTimezone: true }).notNull().defaultNow(),
-    // "uitgenodigd" (wacht op antwoord), "bevestigd", "afgezegd" of "verlopen" (niet op tijd gereageerd).
+    // "uitgenodigd" (wacht op antwoord), "bevestigd", "afgezegd", "verlopen" (niet op tijd gereageerd)
+    // of "geannuleerd" (de partij ging niet door; deze speler kan die dag gewoon opnieuw worden ingepland).
     status: text().notNull().default("bevestigd"),
     // Geheime sleutel voor de knoppen in de e-mail (bevestigen zonder inloggen).
     token: text().unique(),
