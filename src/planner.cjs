@@ -84,11 +84,10 @@
     { id: '2x-per-week', label: '2x per week' },
     { id: '3x-per-week', label: '3x per week' }
   ];
+  // Per club ja of nee. (Oudere profielen kunnen nog 'zomer' hebben; dat telt buiten lente en zomer als 'nee'.)
   const VOORKEUREN = [
-    { id: 'wel', label: 'Wel' },
-    // Alleen bij buitenbanen: in herfst en winter telt de club als 'niet'.
-    { id: 'zomer', label: 'Alleen lente en zomer', alleenBuiten: true },
-    { id: 'niet', label: 'Niet' }
+    { id: 'wel', label: 'Ja' },
+    { id: 'niet', label: 'Nee' }
   ];
   // Lente en zomer: 21 maart t/m 22 september.
   const LENTE_ZOMER = ['03-21', '09-22'];
@@ -350,6 +349,8 @@
             const va = a.status.soort === 'boekbaar' ? 0 : 1;
             const vb = b.status.soort === 'boekbaar' ? 0 : 1;
             if (va !== vb) return va - vb;
+            const la = a.club.laatsteKeus ? 1 : 0, lb = b.club.laatsteKeus ? 1 : 0;
+            if (la !== lb) return la - lb;
             return (a.prijs ? a.prijs.perPersoon : 1e9) - (b.prijs ? b.prijs.perPersoon : 1e9);
           });
         kandidaten.push({

@@ -15,9 +15,10 @@
 // POST /api/antwoord         { t, a: "ja" | "nee" } -> uitnodiging beantwoorden
 // GET  /api/agenda?t=...     -> agenda-afspraak (.ics) van een partij, via de sleutel uit de e-mail
 import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
-import { getUser, verifyRequestOrigin, AuthError } from "@netlify/identity";
+import { getUser, verifyRequestOrigin, AuthError, admin } from "@netlify/identity";
 import { db } from "../../db/index.js";
-import { beantwoord, meldGeboekt, zoekUitnodiging, spelendVan, isActief, agendaVoor } from "../../lib/automatisch.js";
+import { beantwoord, markeerGeboekt, meldBetaallink, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, type Keuze } from "../../lib/automatisch.js";
+import { leesTelefoon, slaTelefoonOp, zichtbareTelefoons, waLink, toonNummer } from "../../lib/telefoon.js";
 // @ts-ignore - gedeelde planner-logica (CommonJS)
 import Planner from "../../src/planner.cjs";
 const P: any = Planner;
@@ -67,10 +68,9 @@ function leesTijden(lijst: unknown[]): string[] | null {
   return out.map(([a, b]) => hhmm(a) + "-" + hhmm(b));
 }
 const FREQ = ["wanneer-het-lukt", "tweewekelijks", "wekelijks", "2x-per-week", "3x-per-week"];
-const CLUBS = ["peakz", "valley", "plaza", "rolde", "hertenkamp"];
-// "zomer" (alleen lente en zomer) kan alleen bij buitenbanen.
-const BUITEN = ["hertenkamp"];
-const VOORKEUR = ["wel", "zomer", "niet"];
+// De clubs; per club ja ("wel") of nee ("niet"). Padel Rolde is de laatste keus.
+const CLUBS = ["peakz", "hertenkamp", "valley", "plaza", "rolde"];
+const VOORKEUR = ["wel", "niet"];
 const MAX_WEKEN_VOORUIT = 6;
 
 const json = (data: unknown, status = 200) =>
@@ -130,6 +130,8 @@ async function mijnSpeler(user: Gebruiker) {
 }
 
 async function alleSpelers(user: Gebruiker, beheer: boolean) {
+  const mij = await mijnSpeler(user);
+  const eigenNummer = mij ? (await zichtbareTelefoons(mij.id)).get(mij.id) ?? null : null;
   // Alleen weken die nog niet voorbij zijn zijn relevant.
   const vanaf = plusDagen(vandaag(), -7);
   const [rijen, weken] = await Promise.all([
@@ -159,7 +161,7 @@ async function alleSpelers(user: Gebruiker, beheer: boolean) {
       frequentie: s.frequentie,
       rustDagen: s.rustDagen,
       clubVoorkeur: s.clubVoorkeur,
-      ...(isIk ? { mailAan: s.mailAan, herinneringAan: s.herinneringAan, standaardWeek: s.standaardWeek ?? null, email: s.email } : {}),
+      ...(isIk ? { mailAan: s.mailAan, herinneringAan: s.herinneringAan, standaardWeek: s.standaardWeek ?? null, email: s.email, boekBereid: s.boekBereid, telefoon: eigenNummer ? toonNummer(eigenNummer) : null } : {}),
       bijgewerkt: s.bijgewerkt.toISOString(),
       weken: weken2,
     };
@@ -199,10 +201,19 @@ async function allePartijen(user: Gebruiker, beheer: boolean) {
     ? alle.filter((p) => !p.geannuleerd)
     : alle.filter((p) => !p.geannuleerd).filter((p) => !!mij && (p.aangemaaktDoor === mij.id || rijen.some((r) => r.partijId === p.id && r.spelerId === mij.id && isActief(r))));
   const namen = new Map((await db.select({ id: spelers.id, naam: spelers.naam }).from(spelers)).map((x) => [x.id, x.naam]));
+  // 06-nummers: de database (row level security) bepaalt welke deze speler mag zien.
+  const nummers = mij ? await zichtbareTelefoons(mij.id) : new Map<number, string>();
+  const info = await partijInfo(lijst.map((p) => p.id));
   return lijst.map((p) => {
     const actief = spelendVan({ ...p, rijen: rijen.filter((r) => r.partijId === p.id) });
     const mijnRij = rijen.find((r) => r.partijId === p.id && r.spelerId === mij?.id);
-    const toon = (r: (typeof rijen)[number]) => ({ naam: namen.get(r.spelerId) ?? "?", ik: r.spelerId === mij?.id, status: r.status, boekt: !!p.boekerId && r.spelerId === p.boekerId, id: r.spelerId, betaald: r.betaald });
+    const toon = (r: (typeof rijen)[number]) => {
+      const nr = r.status === "bevestigd" ? nummers.get(r.spelerId) : undefined;
+      return { naam: namen.get(r.spelerId) ?? "?", ik: r.spelerId === mij?.id, status: r.status, boekt: !!p.boekerId && r.spelerId === p.boekerId, id: r.spelerId, betaald: r.betaald,
+        ...(nr ? { telefoon: toonNummer(nr), whatsapp: waLink(nr) } : {}),
+        ...(r.status === "uitgenodigd" ? { reactieTot: reactieTotVan(r, p) } : {}) };
+    };
+    const extra = info.get(p.id);
     const vier = actief.slice(0, MAX_SPELERS);
     return {
       id: p.id,
@@ -217,6 +228,14 @@ async function allePartijen(user: Gebruiker, beheer: boolean) {
       mijnStatus: mijnRij && isActief(mijnRij) ? mijnRij.status : null,
       doeIkMee: !!mijnRij && isActief(mijnRij),
       compleet: vier.length === MAX_SPELERS && vier.every((r) => r.status === "bevestigd"),
+      bedrag: extra?.bedrag ?? null,
+      bedragDrie: extra?.bedragDrie ?? null,
+      gratisTot: extra?.gratisTot ?? null,
+      boekenTot: extra?.boekenTot ?? null,
+      besluit: p.besluit,
+      overnameNodig: p.overnameNodig,
+      vorigeBoeker: extra?.vorigeBoeker ?? null,
+      afgemeld: rijen.filter((r) => r.partijId === p.id && r.status === "afgezegd").map((r) => namen.get(r.spelerId) ?? "?"),
       boeker: p.boekerId ? namen.get(p.boekerId) ?? null : null,
       boekerIkke: !!mij && p.boekerId === mij.id,
       geboekt: p.geboekt,
@@ -237,7 +256,7 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
   if (p.geannuleerd) return fout("Deze partij is geannuleerd: er konden niet genoeg spelers.", 409);
   if (actie === "aanmelden" || actie === "afmelden") {
     const r = await beantwoord(id, mij.id, actie === "aanmelden");
-    return r.ok ? json({ ok: true, tekst: r.tekst, boeken: r.boeken }) : fout(r.fout, r.status);
+    return r.ok ? json({ ok: true, tekst: r.tekst, boeken: r.boeken, betaallink: r.betaallink, bedrag: r.bedrag }) : fout(r.fout, r.status);
   } else if (actie === "geboekt" || actie === "nietgeboekt" || actie === "betaallink") {
     if (p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de beheerder) kan dit aanpassen.", 403);
     if (actie === "nietgeboekt") {
@@ -258,10 +277,10 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
     if (actie === "geboekt") set.geboekt = true;
     if (Object.keys(set).length) await db.update(partijen).set(set).where(eq(partijen.id, id));
     if (actie === "geboekt" && !p.geboekt) {
-      await meldGeboekt(id, "geboekt");
-      return json({ ok: true, tekst: link ? "De baan staat op geboekt. De andere spelers krijgen een mail met je Tikkie." : "De baan staat op geboekt. De andere spelers krijgen daar een mail over." });
+      await markeerGeboekt(id);
+      return json({ ok: true, tekst: "De baan staat op geboekt. De andere spelers krijgen nu hun uitnodiging" + (link ? ", en wie bevestigt ziet meteen je Tikkie." : ". Zet er nog een Tikkie bij, dan kan wie bevestigt meteen betalen.") });
     }
-    if (nieuweLink) await meldGeboekt(id, "betaallink");
+    if (nieuweLink) await meldBetaallink(id);
     return json({ ok: true, tekst: actie === "geboekt" ? "De baan stond al op geboekt." : !link ? "De betaallink is weggehaald." : nieuweLink ? "De betaallink is gedeeld. De andere spelers krijgen hem per mail." : "De betaallink stond er al." });
   } else if (actie === "betaald" || actie === "nietbetaald") {
     const spelerId = Number(b.spelerId);
@@ -273,6 +292,16 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
       .where(and(eq(partijDeelnemers.partijId, id), eq(partijDeelnemers.spelerId, spelerId)))
       .returning({ id: partijDeelnemers.spelerId });
     if (!r.length) return fout("Deze speler hoort niet bij deze partij.", 404);
+  } else if (actie === "keuze") {
+    const keuze = b.keuze as Keuze;
+    if (!["nietboeken", "zoeken", "annuleren", "drie", "overnemen"].includes(keuze)) return fout("Onbekende keuze.");
+    const r = await boekerKeuze(id, mij.id, keuze, beheer);
+    return r.ok ? json({ ok: true, tekst: r.tekst }) : fout(r.fout, r.status);
+  } else if (actie === "voorstel") {
+    const r = await stelVoor(id, mij.id, Number(b.spelerId), beheer);
+    return r.ok ? json({ ok: true, tekst: r.tekst }) : fout(r.fout, r.status);
+  } else if (actie === "kandidaten") {
+    return json({ kandidaten: await kandidatenVoor(id) });
   } else if (actie === "verwijderen") {
     if (p.aangemaaktDoor !== mij.id && !beheer) return fout("Alleen wie de partij heeft gepland (of de beheerder) kan deze verwijderen.", 403);
     await db.delete(partijen).where(eq(partijen.id, id));
@@ -302,10 +331,14 @@ async function slaProfielOp(user: Gebruiker, b: any) {
   const clubVoorkeur: Record<string, string> = {};
   for (const c of CLUBS) {
     const v = b.clubVoorkeur?.[c] ?? "wel";
-    if (!VOORKEUR.includes(v) || (v === "zomer" && !BUITEN.includes(c))) return fout("Ongeldige baanvoorkeur.");
+    if (!VOORKEUR.includes(v)) return fout("Ongeldige clubkeuze.");
     clubVoorkeur[c] = v;
   }
-  if (CLUBS.every((c) => clubVoorkeur[c] === "niet")) return fout("Kies minstens één club waar je wel wilt spelen.");
+  if (CLUBS.every((c) => clubVoorkeur[c] === "niet")) return fout("Zet minstens één club op ja.");
+  // 06-nummer: verplicht om een partij te bevestigen; leeg laten = verwijderen.
+  const metTelefoon = "telefoon" in b;
+  const telefoon = metTelefoon ? leesTelefoon(b.telefoon) : null;
+  if (telefoon === undefined) return fout("Vul een geldig 06-nummer in (bijv. 06-12345678), of laat het veld leeg.");
 
   const waarden = {
     naam,
@@ -317,6 +350,7 @@ async function slaProfielOp(user: Gebruiker, b: any) {
     clubVoorkeur,
     email: user.email ?? null,
     mailAan: b.mailAan !== false,
+    ...(typeof b.boekBereid === "boolean" ? { boekBereid: b.boekBereid } : {}),
     ...(typeof b.herinneringAan === "boolean" ? { herinneringAan: b.herinneringAan } : {}),
     ...(metStandaard ? { standaardWeek } : {}),
     bijgewerkt: new Date(),
@@ -341,6 +375,26 @@ async function slaProfielOp(user: Gebruiker, b: any) {
   } else {
     await db.insert(spelers).values({ slug: key, userId: user.id, ...waarden });
   }
+  if (metTelefoon) {
+    const nu = await mijnSpeler(user);
+    if (nu) await slaTelefoonOp(nu.id, telefoon);
+  }
+  return json({ ok: true });
+}
+
+// Account verwijderen: speler, beschikbaarheid, 06-nummer en deelnames (cascade) en het inlogaccount.
+async function verwijderAccount(user: Gebruiker) {
+  const mij = await mijnSpeler(user);
+  if (mij) {
+    // Eerst netjes afmelden voor komende partijen, zodat de anderen bericht krijgen en er een vervanger komt.
+    const mijn = await db.select({ id: partijDeelnemers.partijId }).from(partijDeelnemers)
+      .innerJoin(partijen, eq(partijen.id, partijDeelnemers.partijId))
+      .where(and(eq(partijDeelnemers.spelerId, mij.id), gte(partijen.datum, vandaag()), inArray(partijDeelnemers.status, ["gepland", "uitgenodigd", "bevestigd"])));
+    for (const r of mijn) { try { await beantwoord(r.id, mij.id, false); } catch (e) { console.error(e); } }
+    await slaTelefoonOp(mij.id, null);
+    await db.delete(spelers).where(eq(spelers.id, mij.id));
+  }
+  try { await admin.deleteUser(user.id); } catch (e) { console.error("Inlogaccount verwijderen mislukt", e); }
   return json({ ok: true });
 }
 
@@ -451,6 +505,9 @@ async function antwoord(req: Request) {
       voorbij: dagenTussen(vandaag(), p.datum) < 0,
       geannuleerd: p.geannuleerd,
       partij: { datum: p.datum, tijd: p.tijd, duur: p.duur, clubId: p.clubId },
+      reactieTot: r.status === "uitgenodigd" ? reactieTotVan(r, p) : null,
+      bedrag: (await partijInfo([p.id])).get(p.id)?.bedrag ?? null,
+      betaallink: r.status === "bevestigd" && p.boekerId !== r.spelerId ? p.betaallink : null,
       spelers: actief.slice(0, MAX_SPELERS).map((x) => ({ naam: namen.get(x.spelerId) ?? "?", status: x.status })),
     });
   }
@@ -459,7 +516,7 @@ async function antwoord(req: Request) {
   if (!r) return fout("Deze link klopt niet (meer).", 404);
   if (b.a !== "ja" && b.a !== "nee") return fout("Kies ja of nee.");
   const uit = await beantwoord(r.partijId, r.spelerId, b.a === "ja");
-  return uit.ok ? json({ ok: true, tekst: uit.tekst, boeken: uit.boeken }) : fout(uit.fout, uit.status);
+  return uit.ok ? json({ ok: true, tekst: uit.tekst, boeken: uit.boeken, betaallink: uit.betaallink, bedrag: uit.bedrag }) : fout(uit.fout, uit.status);
 }
 
 export default async (req: Request) => {
@@ -488,7 +545,8 @@ export default async (req: Request) => {
     if (pad === "/api/beschikbaarheid" && schrijven) return await slaBeschikbaarheidOp(user, await leesBody(req));
     if (pad === "/api/standaardweek" && schrijven) return await slaStandaardweekOp(user, await leesBody(req));
     if (pad === "/api/partijen" && req.method === "GET") return (async () => { const beheer = isBeheer(req); return json({ partijen: await allePartijen(user, beheer), beheer }); })();
-    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|betaald|nietbetaald)$/.exec(pad);
+    if (pad === "/api/account" && req.method === "DELETE") { verifyRequestOrigin(req); return await verwijderAccount(user); }
+    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|betaald|nietbetaald|keuze|voorstel|kandidaten)$/.exec(pad);
     if (m && req.method === "POST") return await wijzigPartij(user, m[1], await leesBody(req), isBeheer(req));
     return fout("Niet gevonden.", 404);
   } catch (e) {
@@ -500,4 +558,4 @@ export default async (req: Request) => {
   }
 };
 
-export const config = { path: ["/api/spelers", "/api/profiel", "/api/beschikbaarheid", "/api/clubs", "/api/overzicht", "/api/partijen", "/api/partijen/*", "/api/antwoord", "/api/agenda", "/api/standaardweek"] };
+export const config = { path: ["/api/spelers", "/api/profiel", "/api/beschikbaarheid", "/api/clubs", "/api/overzicht", "/api/partijen", "/api/partijen/*", "/api/antwoord", "/api/agenda", "/api/standaardweek", "/api/account"] };
