@@ -1,5 +1,5 @@
 // Automatisch plannen, boeken, uitnodigen en afzeggen. Alles draait om het begin van de partij (T):
-// - Elke dag (rond 09:00) zoekt de site partijen die over minimaal 7 dagen plaatsvinden: vier spelers die qua niveau,
+// - Elk uur van 08:00 tot en met 17:00 zoekt de site partijen vanaf 7 dagen vooruit tot zo ver als de clubs te boeken zijn: vier spelers die qua niveau,
 //   speelduur en tijd passen, met een club die ze alle vier op "ja" hebben staan en waar live een baan vrij is.
 //   Kiest de club: vrije baan, dan goedkoopste per persoon, dan de club waar het langst geleden een partij was.
 // - Eerst boekt een bereidwillige speler (met 06-nummer) de baan. Boekt die niet binnen een paar uur, dan wijst
@@ -28,11 +28,15 @@ const UUR = 3600000;
 const DAG = 86400000;
 // Hoeveel partijen er per run hooguit automatisch worden aangemaakt.
 const MAX_NIEUW_PER_RUN = 4;
-// Partijen worden minstens een week vooruit gepland (dan wordt de baan geboekt); een paar dagen speling voor als het een dag niet lukte.
+// Partijen worden minstens een week vooruit gepland, en zo ver vooruit als de club met de langste boekingshorizon toelaat
+// (Beheer clubs; populaire avonden zijn snel vol). Clubs die een dag nog niet openzetten slaat de live controle vanzelf over.
 export const MIN_DAGEN_VOORUIT = 7;
-const MAX_DAGEN_VOORUIT = 10;
-// Het dagelijkse zoeken gebeurt in de run van dit uur (Nederlandse tijd).
-const ZOEK_UUR = 9;
+// Zoeken gebeurt in de runs van 08:00 tot en met 17:00 (Nederlandse tijd), zodat de boeker zijn 4 uur nog dezelfde dag heeft.
+const ZOEK_VAN = 8;
+const ZOEK_TOT = 17;
+// Elke run controleert eerst de beste momenten en daarna een wisselend deel van de rest, zodat in de loop van de dag alle momenten aan bod komen.
+const VASTE_CHECKS = 4;
+const KANDIDATEN = 40;
 // Reactietijd op een uitnodiging en boektijd voor de boeker, in uren waarin de klok loopt (08:00–22:00).
 export const REACTIE_UREN = 12;
 export const BOEK_UREN = 4;
@@ -743,9 +747,19 @@ function zonderAfgezegdeDagen(ctx: Context, s: Speler, dagen: string[]): Speler 
   return { ...s, weken };
 }
 
+// De beste momenten eerst, daarna de rest vanaf een punt dat elk uur opschuift.
+function volgorde<T>(lijst: T[], ronde: number): T[] {
+  const vast = lijst.slice(0, VASTE_CHECKS);
+  const rest = lijst.slice(VASTE_CHECKS);
+  if (!rest.length) return vast;
+  const begin = (ronde * (MAX_BAAN_CHECKS - VASTE_CHECKS)) % rest.length;
+  return [...vast, ...rest.slice(begin), ...rest.slice(0, begin)];
+}
+
 async function zoekNieuwePartijen(ctx: Context, mails: Mail[]) {
   const dagen: string[] = [];
-  const max = Math.min(MAX_DAGEN_VOORUIT, P.boekingsHorizon(ctx.clubs));
+  const max = P.boekingsHorizon(ctx.clubs);
+  const ronde = Math.floor(Date.now() / UUR);
   for (let i = MIN_DAGEN_VOORUIT; i <= max; i++) dagen.push(plusDagen(ctx.vandaag, i));
   const vandaagDatum = P.parseKey(ctx.vandaag);
   const begin = Date.now();
@@ -756,7 +770,7 @@ async function zoekNieuwePartijen(ctx: Context, mails: Mail[]) {
   while (gemaakt < MAX_NIEUW_PER_RUN && !genoegGezocht()) {
     const pool = ctx.spelers.filter((s) => dagen.some((d) => heeftRuimte(ctx, s, d))).map((s) => zonderAfgezegdeDagen(ctx, s, dagen));
     if (pool.length < MAX_SPELERS) break;
-    const kandidaten = P.plan(pool, ctx.clubs, vandaagDatum, 30, dagen);
+    const kandidaten = volgorde(P.plan(pool, ctx.clubs, vandaagDatum, KANDIDATEN, dagen), ronde);
     let gekozen: { k: any; groep: Speler[]; duur: number; clubId: string; tijd: string; prijs: number } | null = null;
     for (const k of kandidaten) {
       if (genoegGezocht()) break;
@@ -816,7 +830,8 @@ export async function automatischPlannen(metZoeken?: boolean) {
   }
   for (const p of ctx.partijen) await werkBij(ctx, p, mails);
   await dagHerinneringen(ctx, mails);
-  const zoeken = metZoeken ?? Math.floor(nlMinuten() / 60) === ZOEK_UUR;
+  const uur = Math.floor(nlMinuten() / 60);
+  const zoeken = metZoeken ?? (uur >= ZOEK_VAN && uur <= ZOEK_TOT);
   const nieuw = zoeken ? await zoekNieuwePartijen(ctx, mails) : 0;
   await verstuur(mails);
   console.log(`Automatisch plannen: ${wachtrij} uit de wachtrij, ${nieuw} nieuwe partij(en), ${verlopen} verlopen uitnodiging(en), ${mails.length} e-mail(s).`);
