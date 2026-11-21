@@ -123,6 +123,10 @@
   .moment.st-open-partij { background:color-mix(in srgb, var(--fout) 9%, var(--card)); border-color:color-mix(in srgb, var(--fout) 30%, var(--lijn)); border-left-color:var(--fout); }
   .moment.st-gepland { background:color-mix(in srgb, #e8892b 12%, var(--card)); border-color:color-mix(in srgb, #e8892b 35%, var(--lijn)); border-left-color:#e8892b; }
   .moment.st-geboekt { background:color-mix(in srgb, var(--goed) 11%, var(--card)); border-color:color-mix(in srgb, var(--goed) 30%, var(--lijn)); border-left-color:var(--goed); }
+  .nummer { display:inline-flex; align-items:center; gap:6px; margin-left:6px; font-variant-numeric:tabular-nums; }
+  a.wa { display:inline-block; font-size:.78rem; font-weight:600; padding:2px 10px; border-radius:99px; background:#25d366; color:#06331a; text-decoration:none; }
+  .klok { font-weight:600; }
+  .beslisvak { margin-top:10px; padding:10px 12px; border-radius:10px; border:1px dashed var(--lijn); background:var(--card); }
   .badge.rood { background:color-mix(in srgb, var(--fout) 14%, transparent); color:var(--fout); }
   .badge.oranje { background:color-mix(in srgb, #e8892b 18%, transparent); color:#b25e0c; }
   @media (prefers-color-scheme: dark) { .badge.oranje { color:#f2a65a; } }
@@ -237,7 +241,7 @@
   <h1>Padelplanner <span>Assen</span></h1>
   <p class="sub">Vind een viertal én een baan die past, in Assen en omgeving.</p>
 </header></div>
-<div class="demo"><p>Vrije banen van Peakz Padel Assen, Valley Padel Assen, Plaza Sportz Assen en Padel Rolde worden live opgehaald.</p></div>
+<div class="demo"><p>Vrije banen van Peakz Padel Assen, Valley Padel Assen, Plaza Sportz Assen, ATV De Hertenkamp en Padel Rolde worden live opgehaald.</p></div>
 
 <main>
   <section id="login-sectie" hidden>
@@ -253,6 +257,11 @@
           <div id="signup-naam-veld" hidden>
             <label for="signup-naam"><strong>Je naam</strong></label>
             <input type="text" id="signup-naam" maxlength="40" autocomplete="name" placeholder="Bijv. Sanne">
+          </div>
+          <div id="signup-tel-veld" hidden>
+            <label for="signup-tel"><strong>06-nummer</strong></label>
+            <input type="tel" id="signup-tel" autocomplete="tel" inputmode="tel" placeholder="06-12345678">
+            <div class="hint">Alleen zichtbaar voor de andere spelers van een partij die jij hebt bevestigd.</div>
           </div>
           <div>
             <label for="email"><strong>E-mailadres</strong></label>
@@ -302,6 +311,11 @@
           <p class="hint">Zo zien de andere spelers je in de planning.</p>
           <input type="text" id="naam" maxlength="40" placeholder="Bijv. Sanne">
         </fieldset>
+        <fieldset>
+          <legend><label for="telefoon">06-nummer</label></legend>
+          <p class="hint">Alleen zichtbaar voor de andere spelers van een partij die jij hebt bevestigd (tot een dag na de partij). Het staat nooit in een e-mail. Nodig om een partij te bevestigen; leeg maken verwijdert je nummer.</p>
+          <input type="tel" id="telefoon" autocomplete="tel" inputmode="tel" placeholder="06-12345678">
+        </fieldset>
         <fieldset id="niveau-veld">
           <legend><label for="niveau">Speelsterkte: op welk niveau speel je ongeveer?</label></legend>
           <p class="hint">Weet je het niet precies? Een schatting is genoeg, je kunt het later aanpassen.</p>
@@ -347,13 +361,15 @@
           <p class="hint">Er worden geen 2 partijen op 1 dag gepland. Bij 1 dag zit er minstens één dag zonder partij tussen (bijv. maandag en woensdag), bij 2 dagen minstens twee.</p>
         </fieldset>
         <fieldset>
-          <legend>Baanvoorkeur: waar wil je wel of niet spelen?</legend>
-          <p class="hint" id="voorkeur-samenvatting">Maakt niet uit: je kunt bij alle clubs worden ingepland.</p>
-          <details class="inklap" id="voorkeur-details">
-            <summary>Clubs aanpassen</summary>
-            <p class="hint">Bij "Niet" plant de planner je nooit bij die club in. Bij buitenbanen kun je ook "Alleen lente en zomer" kiezen: dan telt die club alleen van 21 maart t/m 22 september mee.</p>
-            <div class="scroll"><table class="voorkeur" id="voorkeur"></table></div>
-          </details>
+          <legend>Per club: wil je er spelen?</legend>
+          <p class="hint">Een club komt alleen in aanmerking als alle vier de spelers hem op ja hebben staan. Minstens één club moet op ja staan.</p>
+          <div class="scroll"><table class="voorkeur" id="voorkeur"></table></div>
+          <p class="hint" id="voorkeur-samenvatting"></p>
+        </fieldset>
+        <fieldset>
+          <legend>Boeken</legend>
+          <label class="optie"><input type="checkbox" id="boek-bereid" checked> Ik ben bereid de baan te boeken en een Tikkie te maken</label>
+          <p class="hint">Bij een match vraagt de site eerst één speler om de baan te boeken (een week van tevoren). Boekt die niet binnen een paar uur, dan vraagt de site de volgende die wil boeken. Pas na het boeken gaan de uitnodigingen de deur uit.</p>
         </fieldset>
         <fieldset>
           <legend>E-mail</legend>
@@ -364,6 +380,12 @@
         <button type="submit">Instellingen opslaan</button>
         <div class="melding" id="profiel-melding" role="status"></div>
       </form>
+      <details class="inklap" style="margin-top:18px">
+        <summary>Account verwijderen</summary>
+        <p class="hint">Je instellingen, beschikbaarheid en 06-nummer worden verwijderd en je wordt afgemeld voor komende partijen (de anderen krijgen bericht). Dit kan niet ongedaan worden gemaakt.</p>
+        <button type="button" class="rustig" id="account-weg">Verwijder mijn account</button>
+        <div class="melding" id="account-melding" role="status"></div>
+      </details>
     </section>
   </div>
 
@@ -418,22 +440,13 @@
       <button type="button" class="rustig" id="ververs">Vernieuw</button>
       <div class="uitleg" style="margin:14px 0 0">
         <ol class="stappen">
-          <li><span class="nr">1.</span><div><strong>De site zoekt een match.</strong> De site plant een partij zodra aan al deze voorwaarden is voldaan:
-            <ul class="voorwaarden">
-              <li>Vier spelers kunnen op hetzelfde moment.</li>
-              <li>Hun niveau past bij elkaar.</li>
-              <li>Hun speelduur past bij elkaar.</li>
-              <li>Hun clubvoorkeur komt overeen.</li>
-              <li>Er is op die club een baan vrij.</li>
-            </ul>
-            Is er geen baan vrij, dan wordt niemand uitgenodigd.</div></li>
-          <li><span class="nr">2.</span><div><strong>Uitnodiging per e-mail.</strong> Zodra er een partij is gepland, krijgen de vier spelers een uitnodiging per e-mail.</div></li>
-          <li><span class="nr">3.</span><div><strong>Bevestigen.</strong> Elke speler bevestigt of zegt af. Reageer je niet op tijd of zeg je af, dan komt de volgende speler die ook kan in jouw plaats. Je hebt maximaal 12 uur om te reageren. Hoe sneller je reageert, hoe groter de kans dat de baan nog beschikbaar is. Is de partij eerder, dan de helft van de tijd tot de partij (minstens 2 uur). De uiterste tijd staat in de mail.</div></li>
-          <li><span class="nr">4.</span><div><strong>Alle vier deelnemers hebben bevestigd.</strong> Wie als vierde bevestigt, boekt meteen de baan: die krijgt direct na het bevestigen de knop om te boeken. Iedereen krijgt een mail dat de partij doorgaat, met de naam van degene die de baan boekt.</div></li>
-          <li><span class="nr">5.</span><div><strong>De baan boeken.</strong> De vierde speler boekt de baan meteen en plakt een Tikkie bij de partij. De anderen krijgen een mail dat de baan geboekt is, met de Tikkie in de mail. De boeker kan er ook voor kiezen om op een andere manier de baan betaald te krijgen, ook dan krijg je een boekingsbevestiging per mail.</div></li>
-          <li><span class="nr">6.</span><div><strong>Op de dag zelf.</strong> Een paar uur voor de partij krijg je een herinnering met tijd, club, medespelers en (als je nog niet betaald hebt) de Tikkie. Met <em>Zet in agenda</em> zet je de partij in je agenda; in de mail "de partij gaat door" zit hij ook als bijlage.</div></li>
-          <li><span class="nr">7.</span><div><strong>Toch niet kunnen?</strong> Klik bij de partij op <em>Ik kan toch niet, zoek vervanger</em>. De anderen krijgen bericht en de site zoekt een vervanger: eerst op de reservelijst, daarna bij andere spelers die kunnen. Een geboekte baan blijft gewoon staan. In de laatste 3 uur voor de partij wordt er niet meer automatisch gezocht.</div></li>
-          <li><span class="nr">8.</span><div><strong>Geen vervanger?</strong> Kan er niemand anders op dat moment (of is het te laat om nog te zoeken) en is de baan nog niet geboekt, dan wordt de partij geannuleerd. De overgebleven spelers krijgen daar een mail over en kunnen gewoon op een ander moment worden ingepland, ook op dezelfde dag. Wie afzegde of niet op tijd reageerde, wordt die dag niet meer ingepland: wie op één moment niet kan, kan een half uur later meestal ook niet. Is de baan al geboekt, dan wordt de partij niet automatisch geannuleerd.</div></li>
+          <li><span class="nr">1.</span><div><strong>De site zoekt een match.</strong> Elke ochtend zoekt de site partijen die over minimaal 7 dagen plaatsvinden: vier spelers die qua niveau, speelduur en tijd passen, een club die ze alle vier op ja hebben staan, en daar een vrije baan. Is er geen baan vrij, dan wordt niemand uitgenodigd. Bij meer clubs: de goedkoopste per persoon, bij gelijke prijs de club waar het langst geleden een partij was.</div></li>
+          <li><span class="nr">2.</span><div><strong>De baan wordt geboekt.</strong> Eén speler die wil boeken krijgt een mail met club, tijd en bedrag per persoon (baanprijs gedeeld door 4). Boekt die niet binnen een paar uur, dan vraagt de site de volgende. Na het boeken zet de boeker een Tikkie bij de partij.</div></li>
+          <li><span class="nr">3.</span><div><strong>Uitnodiging per e-mail.</strong> De andere spelers krijgen een mail met club, tijd, bedrag per persoon en de uiterste reactietijd, met <em>Ik doe mee</em> of <em>Ik kan niet</em>. Je hebt 12 uur; tussen 22:00 en 08:00 loopt de klok niet en gaan er geen mails uit.</div></li>
+          <li><span class="nr">4.</span><div><strong>Bevestigen.</strong> Daarvoor is je 06-nummer nodig. Wie bevestigt, ziet meteen de Tikkie. Reageert iemand niet op tijd of zegt hij af, dan nodigt de site de volgende passende speler uit. Zijn alle vier bevestigd, dan krijgt iedereen een mail dat de partij doorgaat.</div></li>
+          <li><span class="nr">5.</span><div><strong>Nummers en WhatsApp.</strong> Op deze pagina zie je de 06-nummers van je bevestigde medespelers, met een knop <em>Stuur bericht via WhatsApp</em>. Nummers staan nooit in een mail.</div></li>
+          <li><span class="nr">6.</span><div><strong>Op de dag zelf.</strong> Een paar uur van tevoren krijg je een herinnering met tijd, club, medespelers en de Tikkie als je nog niet betaald hebt.</div></li>
+          <li><span class="nr">7.</span><div><strong>Kun je niet meer?</strong> Klik op <em>Ik kan niet meer</em> (een appje in de groep ziet de site niet). Tot 72 uur voor aanvang zoekt de site automatisch een vervanger. Tussen 72 en 50 uur kiest de boeker: vervanger zoeken of annuleren; iedereen mag iemand voorstellen. Om 50 uur beslist de boeker: annuleren of doorgaan met drie. Binnen 48 uur kan er niet meer gratis worden geannuleerd: wie dan afzegt, regelt zelf een vervanger of betaalt zijn deel. Zegt de boeker af, dan neemt een andere bevestigde speler de baan over.</div></li>
         </ol>
       </div>
     </section>
@@ -569,9 +582,8 @@
   function bouwVoorkeur() {
     $('voorkeur').replaceChildren(
       h('thead', {}, h('tr', {}, h('th', {}, 'Club'), P.VOORKEUREN.map((v) => h('th', {}, v.label)))),
-      h('tbody', {}, clubs.map((c) => h('tr', {}, h('td', {}, c.naam, c.type === 'outdoor' ? h('div', { class: 'hint' }, 'buitenbanen') : null),
-        P.VOORKEUREN.map((v) => h('td', {}, v.alleenBuiten && c.type !== 'outdoor' ? h('span', { class: 'hint', 'aria-hidden': 'true' }, '–')
-          : h('input', { type: 'radio', name: 'club-' + c.id, value: v.id, checked: v.id === 'wel', 'aria-label': c.naam + ': ' + v.label })))))));
+      h('tbody', {}, clubs.map((c) => h('tr', {}, h('td', {}, c.naam, h('div', { class: 'hint' }, 'Boeken via ' + c.systeem + ' · gratis annuleren ' + (c.annuleren || '48 uur') + (c.opmerkingVast ? '. ' + c.opmerkingVast : ''))),
+        P.VOORKEUREN.map((v) => h('td', {}, h('input', { type: 'radio', name: 'club-' + c.id, value: v.id, checked: v.id === 'wel', 'aria-label': c.naam + ': ' + v.label })))))));
   }
 
   function vulProfiel(r) {
@@ -590,6 +602,8 @@
     $('frequentie').value = r ? r.frequentie : 'wanneer-het-lukt';
     $('rust-dagen').value = String(r && r.rustDagen ? r.rustDagen : 0);
     $('mail-aan').checked = !r || r.mailAan !== false;
+    $('boek-bereid').checked = !r || r.boekBereid !== false;
+    $('telefoon').value = (r && r.telefoon) || lees('pp_telefoon');
     $('herinnering-aan').checked = !r || r.herinneringAan !== false;
     clubs.forEach((c) => {
       const v = r ? P.voorkeurVan(r, c.id) : 'wel';
@@ -599,10 +613,10 @@
   }
   // Baanvoorkeur kort samenvatten; de tabel staat ingeklapt.
   function toonVoorkeurSamenvatting() {
-    const niet = clubs.filter((c) => (document.querySelector('input[name="club-' + c.id + '"]:checked') || {}).value === 'niet').map((c) => c.naam);
-    const zomer = clubs.filter((c) => (document.querySelector('input[name="club-' + c.id + '"]:checked') || {}).value === 'zomer').map((c) => c.naam);
-    $('voorkeur-samenvatting').textContent = !niet.length && !zomer.length ? 'Maakt niet uit: je kunt bij alle clubs worden ingepland.'
-      : [niet.length ? 'Niet bij: ' + niet.join(', ') + '.' : '', zomer.length ? 'Alleen in lente en zomer: ' + zomer.join(', ') + '.' : ''].join(' ').trim();
+    const ja = clubs.filter((c) => (document.querySelector('input[name="club-' + c.id + '"]:checked') || {}).value !== 'niet');
+    const el = $('voorkeur-samenvatting');
+    el.textContent = !ja.length ? 'Zet minstens één club op ja.' : ja.length === 1 ? 'Let op: je hebt maar één club op ja (' + ja[0].naam + '). Dan vind je minder snel een match.' : 'Je kunt worden ingepland bij: ' + ja.map((c) => c.naam).join(', ') + '.';
+    el.className = 'hint' + (ja.length <= 1 ? ' let' : '');
   }
   $('voorkeur').addEventListener('change', toonVoorkeurSamenvatting);
 
@@ -953,122 +967,154 @@
   }
   const naamLijst = (lijst) => lijst.map((d, i) => [i ? ', ' : '', d.ik ? h('strong', {}, d.naam + ' (jij)') : d.naam,
     d.status === 'uitgenodigd' ? h('span', { class: 'hint' }, ' (uitgenodigd)') : null]);
+  const klok = (ms) => new Date(ms).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const startMs = (p) => P.parseKey(p.datum).getTime() + P.naarMin(p.tijd) * 60000;
+  function gratisTekst(p) {
+    if (!p.gratisTot) return '';
+    const ms = p.gratisTot - Date.now();
+    if (ms <= 0) return 'Gratis annuleren kan niet meer (minder dan 48 uur voor aanvang).';
+    const u = Math.floor(ms / 3600000);
+    return 'Nog ' + (u >= 48 ? Math.floor(u / 24) + ' dagen en ' + (u % 24) + ' uur' : u + ' uur') + ' om gratis te annuleren (tot ' + klok(p.gratisTot) + ').';
+  }
+  function knop(tekst, klasse, actie) { const b = h('button', { type: 'button', class: klasse || '' }, tekst); b.addEventListener('click', actie); return b; }
   function toonPartijen() {
     const box = $('partijen');
-    if (!partijen.length) { box.replaceChildren(h('p', { class: 'hint' }, isBeheerder ? 'Er zijn nog geen partijen gepland. Zodra vier spelers op hetzelfde moment kunnen, plant de site er een en krijgen zij een mail.' : 'Je hebt nog geen geplande partijen. Zodra jij en drie passende spelers op hetzelfde moment kunnen, plant de site er een en krijg je een mail.')); return; }
-    // Eerst de partijen waarvoor je bent uitgenodigd, dan die waar je meedoet, dan de rest.
-    const volgorde = (p) => (p.mijnStatus === 'uitgenodigd' ? 0 : p.doeIkMee ? 1 : 2);
+    if (!partijen.length) { box.replaceChildren(h('p', { class: 'hint' }, isBeheerder ? 'Er zijn nog geen partijen gepland.' : 'Je hebt nog geen geplande partijen. Zodra jij en drie passende spelers op hetzelfde moment kunnen en er een baan vrij is, plant de site er een.')); return; }
+    const volgorde = (p) => (p.mijnStatus === 'uitgenodigd' || (p.boekerIkke && !p.geboekt) ? 0 : p.doeIkMee ? 1 : 2);
+    const gevraagd = new URLSearchParams(location.search).get('partij');
     box.replaceChildren(...partijen.slice().sort((a, b) => volgorde(a) - volgorde(b)).map((p) => {
       const melding = h('div', { class: 'melding', role: 'status' });
-      const knoppen = [];
-      const vol = p.deelnemers.length >= 4;
-      const isReserve = p.reserves.some((d) => d.ik);
-      if (p.mijnStatus === 'uitgenodigd') {
-        const ja = h('button', { type: 'button' }, 'Ik doe mee');
-        ja.addEventListener('click', () => partijActie('/aanmelden', { id: p.id }, melding));
-        const nee = h('button', { type: 'button', class: 'rustig' }, 'Kan toch niet');
-        nee.addEventListener('click', () => partijActie('/afmelden', { id: p.id }, melding));
-        knoppen.push(ja, nee);
-        // Hebben de andere drie al bevestigd, dan boek jij meteen als je meedoet.
-        if (p.deelnemers.length >= 4 && p.deelnemers.filter((d) => !d.ik && d.status === 'bevestigd').length === 3) {
-          melding.textContent = 'De andere drie hebben al bevestigd. Doe je mee, dan ben jij de vierde en boek je meteen de baan.';
-          melding.className = 'melding let';
-        }
-      } else if (p.doeIkMee) {
-        const binnenkort = new Date(P.parseKey(p.datum).getTime() + P.naarMin(p.tijd) * 60000) - Date.now() <= 3 * 3600000;
-        const af = h('button', { type: 'button', class: 'rustig' }, isReserve ? 'Van de reservelijst af' : p.geboekt || p.compleet ? 'Ik kan toch niet, zoek vervanger' : 'Kan toch niet');
-        const vraag = binnenkort
-          ? 'De partij begint binnen 3 uur. Er wordt dan niet meer automatisch een vervanger gezocht; de anderen krijgen wel bericht. Toch afmelden?'
-          : 'Weet je zeker dat je niet meer meedoet? De anderen krijgen bericht. Er wordt een vervanger gezocht: eerst op de reservelijst, daarna bij andere spelers die kunnen.' +
-            (p.geboekt ? (p.boekerIkke ? ' De baan blijft op jouw naam staan; spreek met de vervanger af hoe die jou betaalt.' : ' De baan blijft geboekt.') : '');
-        af.addEventListener('click', () => { if (isReserve || confirm(vraag)) partijActie('/afmelden', { id: p.id }, melding); });
-        if (!isReserve && (p.compleet || p.geboekt)) {
-          const ag = h('button', { type: 'button', class: 'rustig' }, '📅 Zet in agenda');
-          ag.addEventListener('click', () => zetInAgenda(p));
-          knoppen.push(ag);
-        }
-        knoppen.push(af);
-      } else if (ik()) {
-        const mee = h('button', { type: 'button', class: vol ? 'rustig' : '' }, vol ? 'Zet me op de reservelijst' : 'Ik doe mee');
-        mee.addEventListener('click', () => partijActie('/aanmelden', { id: p.id }, melding));
-        knoppen.push(mee);
-      }
-      if (p.vanMij || isBeheerder) {
-        const weg = h('button', { type: 'button', class: 'link' }, 'Partij verwijderen');
-        weg.addEventListener('click', () => { if (confirm('Deze partij verwijderen? Iedereen die erbij staat wordt dan ook afgemeld (zonder e-mail).')) partijActie('/verwijderen', { id: p.id }, melding); });
-        knoppen.push(weg);
-      }
-      // Kleur: lichtrood = nog niet gepland (wacht op spelers), lichtoranje = gepland (baan nog boeken), groen = baan geboekt.
-      const open = 4 - p.deelnemers.length;
-      const wacht = p.deelnemers.filter((d) => d.status !== 'bevestigd').length;
-      const stand = p.compleet ? (p.geboekt ? 'geboekt' : 'gepland') : 'open';
-      const badge = stand === 'geboekt' ? h('span', { class: 'badge' }, 'baan geboekt')
-        : stand === 'gepland' ? h('span', { class: 'badge oranje' }, 'gepland · baan nog boeken')
-        : h('span', { class: 'badge rood' }, 'nog niet gepland · ' + (open > 0 ? 'nog ' + open + (open === 1 ? ' speler' : ' spelers') + ' nodig' : 'wacht op ' + wacht + (wacht === 1 ? ' bevestiging' : ' bevestigingen')));
-      const spelerRij = (d) => h('li', {}, d.ik ? h('strong', {}, d.naam + ' (jij)') : h('span', {}, d.naam),
-        d.status === 'bevestigd' ? h('span', { class: 'sp-ok' }, '✓ bevestigd') : h('span', { class: 'sp-wacht' }, '… nog niet bevestigd'),
-        p.compleet && d.boekt ? h('span', { class: 'hint' }, '· boekt de baan') : null,
-        betaalStand(d));
-      // Betalen: na het boeken deelt wie boekte een Tikkie; per speler zie je of die al heeft betaald.
-      function betaalStand(d) {
-        if (stand !== 'geboekt' || !p.betaallink || d.boekt) return null;
-        const magWijzigen = d.ik || p.boekerIkke || isBeheerder;
-        const knop = magWijzigen ? h('button', { type: 'button', class: 'link' }, d.betaald ? 'toch niet' : (d.ik ? 'Ik heb betaald' : 'markeer als betaald')) : null;
-        if (knop) knop.addEventListener('click', () => partijActie(d.betaald ? '/nietbetaald' : '/betaald', { id: p.id, spelerId: d.id }, melding));
-        return h('span', {}, d.betaald ? h('span', { class: 'sp-ok' }, '· betaald') : h('span', { class: 'sp-wacht' }, '· nog niet betaald'), knop ? ' ' : null, knop);
-      }
-      const spelers4 = h('ul', { class: 'spelerlijst' }, ...p.deelnemers.map(spelerRij),
-        ...Array.from({ length: Math.max(0, open) }, () => h('li', { class: 'sp-open' }, 'nog een speler nodig')));
+      const doe = (pad, body) => partijActie(pad, Object.assign({ id: p.id }, body || {}), melding);
       const club = clubs.find((x) => x.id === p.clubId);
-      let boekInfo = null;
-      if (stand === 'gepland' && p.boeker) {
-        const magBoeken = p.boekerIkke || isBeheerder;
-        const vink = magBoeken ? h('button', { type: 'button' }, 'Baan is geboekt') : null;
-        let tikkieVak = null;
-        if (magBoeken) {
-          // Tikkie is optioneel: ook zonder Tikkie krijgen de anderen een mail dat de baan geboekt is.
-          const prG = club ? P.prijs(club, p.duur, p.datum, P.tijdId(P.naarMin(p.tijd), P.naarMin(p.tijd) + p.duur)) : null;
-          const tikkie = h('input', { type: 'text', inputmode: 'url', placeholder: 'https://tikkie.me/pay/… (mag leeg)', 'aria-label': 'Tikkie of andere betaallink (optioneel)' });
-          tikkie.value = p.betaallink || '';
-          vink.addEventListener('click', () => partijActie('/geboekt', { id: p.id, link: tikkie.value }, melding));
-          tikkieVak = h('div', { class: 'betaalvak' },
-            h('div', {}, 'Geboekt? Plak eventueel je Tikkie' + (prG ? ' (' + euro(prG.perPersoon) + ' p.p.)' : '') + ' en druk op ', h('em', {}, 'Baan is geboekt'), '. De anderen krijgen een mail dat de baan geboekt is, met de Tikkie erin. Geen Tikkie? Laat het veld leeg; de mail gaat dan toch.'),
-            h('div', { class: 'boekrij' }, tikkie, vink));
-        }
-        boekInfo = h('div', {}, h('div', {}, p.boekerIkke ? h('strong', {}, 'Jij moet de baan boeken.') : h('span', {}, h('strong', {}, p.boeker), ' moet de baan boeken.')),
-          p.boekerIkke && club ? h('div', { class: 'boekrij' }, h('a', { class: 'knop', href: club.boeken, target: '_blank', rel: 'noopener' }, 'Boek bij ' + club.naam + ' ↗')) : null, tikkieVak);
-      } else if (stand === 'geboekt') {
-        const terug = (p.boekerIkke || isBeheerder) ? h('button', { type: 'button', class: 'link' }, 'Toch nog niet geboekt') : null;
-        if (terug) terug.addEventListener('click', () => partijActie('/nietgeboekt', { id: p.id }, melding));
-        const pr = club ? P.prijs(club, p.duur, p.datum, P.tijdId(P.naarMin(p.tijd), P.naarMin(p.tijd) + p.duur)) : null;
-        const deel = pr ? ' (' + euro(pr.perPersoon) + ' p.p.)' : '';
-        let betaal = null;
+      const uren = (startMs(p) - Date.now()) / 3600000;
+      const bevestigd = p.deelnemers.filter((d) => d.status === 'bevestigd').length;
+      const isReserve = p.reserves.some((d) => d.ik);
+      const drie = p.besluit === 'drie';
+      const deel = drie ? p.bedragDrie : p.bedrag;
+      const bedragTekst = deel != null ? euro(deel) + ' per persoon' + (drie ? ' (met drie)' : '') : 'bedrag nog onbekend';
+      const knoppen = [];
+      const blokken = [];
+
+      // Wie de baan boekt, voordat er uitgenodigd wordt.
+      if (!p.geboekt && p.boeker) {
         if (p.boekerIkke || isBeheerder) {
-          const veld = h('input', { type: 'text', inputmode: 'url', placeholder: 'https://tikkie.me/pay/…', 'aria-label': 'Tikkie of andere betaallink' });
-          veld.value = p.betaallink || '';
-          const deelKnop = h('button', { type: 'button' }, p.betaallink ? 'Link wijzigen' : 'Deel Tikkie met de anderen');
-          deelKnop.addEventListener('click', () => partijActie('/betaallink', { id: p.id, link: veld.value }, melding));
-          betaal = h('div', { class: 'betaalvak' },
-            h('div', {}, p.betaallink ? 'Je Tikkie is gedeeld met de andere spelers.' : 'Nog geen Tikkie gedeeld. Wil je dat alsnog doen? Maak in je bank-app of de Tikkie-app een Tikkie' + deel + ', kopieer de link en plak hem hier. De anderen krijgen hem per mail; je hebt hun nummers niet nodig.'),
-            h('div', { class: 'boekrij' }, veld, deelKnop));
-        } else if (p.betaallink) {
-          const mijn = p.deelnemers.find((d) => d.ik);
-          betaal = mijn && !mijn.betaald ? h('div', { class: 'boekrij' }, h('a', { class: 'knop', href: p.betaallink, target: '_blank', rel: 'noopener' }, 'Betaal je deel via Tikkie' + deel + ' ↗')) : null;
+          const tikkie = h('input', { type: 'text', inputmode: 'url', placeholder: 'https://tikkie.me/pay/…', 'aria-label': 'Tikkie-link' });
+          tikkie.value = p.betaallink || '';
+          blokken.push(h('div', { class: 'betaalvak' },
+            h('div', {}, h('strong', {}, p.boekerIkke ? 'Jij boekt de baan' : p.boeker + ' boekt de baan'), p.boekenTot ? ' vóór ' : '', p.boekenTot ? h('span', { class: 'klok' }, klok(p.boekenTot)) : null, '. Bedrag: ' + bedragTekst + '.'),
+            h('div', { class: 'hint' }, 'Boek de baan, maak een Tikkie voor het bedrag per persoon en plak de link hier. Na "Baan is geboekt" krijgen de anderen hun uitnodiging.'),
+            h('div', { class: 'boekrij' }, club ? h('a', { class: 'knop', href: club.boeken, target: '_blank', rel: 'noopener' }, 'Boek bij ' + club.naam + ' ↗') : null),
+            h('div', { class: 'boekrij' }, tikkie, knop('Baan is geboekt', '', () => doe('/geboekt', { link: tikkie.value }))),
+            p.boekerIkke ? h('div', { class: 'boekrij' }, knop('Ik kan niet boeken', 'link', () => { if (confirm('Dan vraagt de site de volgende speler die wil boeken. Je blijft gewoon meespelen.')) doe('/keuze', { keuze: 'nietboeken' }); })) : null));
         } else if (p.doeIkMee) {
-          betaal = h('div', { class: 'hint' }, 'Er is (nog) geen Tikkie gedeeld. Spreek met ' + (p.boeker || 'wie boekte') + ' af hoe je je deel betaalt; komt er alsnog een Tikkie, dan krijg je die per mail.');
+          blokken.push(h('div', { class: 'hint' }, p.boeker + ' boekt eerst de baan. Daarna krijg je een uitnodiging per e-mail.'));
         }
-        boekInfo = h('div', {}, h('div', {}, p.boeker ? (p.boekerIkke ? 'Jij hebt de baan geboekt.' : p.boeker + ' heeft de baan geboekt.') : 'De baan is geboekt.', terug ? ' ' : null, terug), betaal);
-      } else if (p.geboekt) {
-        boekInfo = h('div', { class: 'hint' }, 'De baan is al geboekt; er wordt nog een speler gezocht.');
       }
-      return h('div', { class: 'moment st-' + (stand === 'open' ? 'open-partij' : stand) },
+
+      if (p.mijnStatus === 'uitgenodigd') {
+        const mijn = p.deelnemers.concat(p.reserves).find((d) => d.ik);
+        blokken.push(h('div', { class: 'let' }, 'Je bent uitgenodigd. Bedrag: ' + bedragTekst + '.', mijn && mijn.reactieTot ? h('div', {}, 'Reageer vóór ', h('span', { class: 'klok' }, klok(mijn.reactieTot)), '.') : null));
+        if (!(ik() && ik().telefoon)) blokken.push(h('div', { class: 'melding fout' }, 'Vul eerst je 06-nummer in bij Vaste instellingen; dat is nodig om te bevestigen.'));
+        knoppen.push(knop('Ik doe mee', '', () => doe('/aanmelden')), knop('Ik kan niet', 'rustig', () => doe('/afmelden')));
+      } else if (p.doeIkMee && p.mijnStatus === 'bevestigd') {
+        if (!isReserve && (p.compleet || p.geboekt)) knoppen.push(knop('📅 Zet in agenda', 'rustig', () => zetInAgenda(p)));
+        knoppen.push(knop(isReserve ? 'Van de reservelijst af' : 'Ik kan niet meer', 'rustig', () => {
+          const vraag = 'Weet je zeker dat je niet meer kunt? Je medespelers en de boeker krijgen een mail. ' + gratisTekst(p) +
+            (uren <= 48 ? ' Binnen 48 uur regel je zelf een vervanger of betaal je je deel.' : uren <= 72 ? ' De boeker kiest of er een vervanger wordt gezocht.' : ' De site zoekt automatisch een vervanger.');
+          if (isReserve || confirm(vraag)) doe('/afmelden');
+        }));
+      } else if (!p.doeIkMee && ik() && p.geboekt && p.deelnemers.length < 4) {
+        knoppen.push(knop('Ik doe mee', '', () => doe('/aanmelden')));
+      }
+
+      // Betalen: wie bevestigde ziet meteen de Tikkie.
+      if (p.betaallink && p.mijnStatus === 'bevestigd' && !p.boekerIkke) {
+        const mijn = p.deelnemers.find((d) => d.ik);
+        if (mijn && !mijn.betaald) blokken.push(h('div', { class: 'boekrij' }, h('a', { class: 'knop', href: p.betaallink, target: '_blank', rel: 'noopener' }, 'Betaal je deel via Tikkie (' + bedragTekst + ') ↗')));
+      }
+      if (p.geboekt && (p.boekerIkke || isBeheerder)) {
+        const veld = h('input', { type: 'text', inputmode: 'url', placeholder: 'https://tikkie.me/pay/…', 'aria-label': 'Tikkie-link' });
+        veld.value = p.betaallink || '';
+        blokken.push(h('div', { class: 'betaalvak' }, h('div', {}, (p.boekerIkke ? 'Jij hebt de baan geboekt.' : p.boeker + ' heeft de baan geboekt.') + ' Bedrag: ' + bedragTekst + '.'),
+          h('div', { class: 'boekrij' }, veld, knop(p.betaallink ? 'Tikkie wijzigen' : 'Deel Tikkie', '', () => doe('/betaallink', { link: veld.value })))));
+      } else if (p.geboekt && p.boeker) {
+        blokken.push(h('div', {}, p.boeker + ' heeft de baan geboekt. Bedrag: ' + bedragTekst + '.'));
+      }
+
+      // De boeker zegt af: overnemen.
+      if (p.overnameNodig) {
+        blokken.push(h('div', { class: 'beslisvak' }, p.boekerIkke
+          ? [h('div', {}, h('strong', {}, 'Neem jij de baan over? '), (p.vorigeBoeker || 'De vorige boeker') + ' kan niet meer. Annuleren en omboeken gaan via de club; zonder overname blijft de baan op naam van ' + (p.vorigeBoeker || 'de vorige boeker') + ' staan.'),
+             h('div', { class: 'boekrij' }, knop('Ik neem de baan over', '', () => doe('/keuze', { keuze: 'overnemen' })))]
+          : h('div', { class: 'hint' }, p.boeker + ' is gevraagd de baan over te nemen van ' + (p.vorigeBoeker || 'de vorige boeker') + '.')));
+      }
+
+      // Er ontbreekt een speler na het boeken: keuzes van de boeker volgens de tijdlijn.
+      if (p.geboekt && bevestigd < 4 && !drie) {
+        const vak = [h('div', {}, h('strong', {}, bevestigd + ' van 4 bevestigd. '), gratisTekst(p))];
+        if (uren > 72) vak.push(h('div', { class: 'hint' }, 'De site zoekt automatisch een vervanger (tot 72 uur voor aanvang).'));
+        else if ((p.boekerIkke || isBeheerder) && uren > 50) {
+          vak.push(h('div', {}, p.besluit === 'zoeken' ? 'Je koos: we zoeken een vervanger (tot 50 uur voor aanvang).' : 'Kies wat er gebeurt:'),
+            h('div', { class: 'boekrij' }, p.besluit === 'zoeken' ? null : knop('We zoeken een vervanger', '', () => doe('/keuze', { keuze: 'zoeken' })),
+              knop('Partij annuleren', 'rustig', () => { if (confirm('De partij annuleren? Iedereen krijgt een mail. Annuleer de baan zelf bij de club.')) doe('/keuze', { keuze: 'annuleren' }); })));
+        } else if ((p.boekerIkke || isBeheerder) && uren > 0) {
+          vak.push(h('div', {}, uren > 48 ? 'Beslis nu: annuleren of doorgaan met drie.' : 'Gratis annuleren kan niet meer. Doorgaan met drie, of toch annuleren:'),
+            h('div', { class: 'boekrij' },
+              knop('Doorgaan met drie' + (p.bedragDrie != null ? ' (' + euro(p.bedragDrie) + ' p.p.)' : ''), '', () => doe('/keuze', { keuze: 'drie' })),
+              knop('Partij annuleren', 'rustig', () => { if (confirm('De partij annuleren? Iedereen krijgt een mail. Annuleer de baan zelf bij de club.')) doe('/keuze', { keuze: 'annuleren' }); })));
+        } else if (uren > 50) vak.push(h('div', { class: 'hint' }, p.boeker + ' kiest: vervanger zoeken of annuleren. Weet je iemand? Stel hem hieronder voor.'));
+        else vak.push(h('div', { class: 'hint' }, uren > 48 ? p.boeker + ' beslist: annuleren of doorgaan met drie.' : 'Wie afzegde, regelt zelf een vervanger of betaalt zijn deel.'));
+        // Zelf iemand voorstellen (de vervanger moet de club op ja hebben staan).
+        if ((p.mijnStatus === 'bevestigd' || p.boekerIkke || isBeheerder) && p.deelnemers.length < 4) {
+          const keus = h('select', { 'aria-label': 'Vervanger voorstellen' }, h('option', { value: '' }, 'Kies een speler…'));
+          const stuur = knop('Stel voor', 'rustig', () => { if (keus.value) doe('/voorstel', { spelerId: Number(keus.value) }); });
+          const laad = knop('Iemand voorstellen', 'link', async () => {
+            laad.hidden = true;
+            try {
+              const r = await fetch('/api/partijen/kandidaten', { method: 'POST', headers: headers({ 'content-type': 'application/json' }), body: JSON.stringify({ id: p.id }) });
+              const d = await r.json();
+              (d.kandidaten || []).forEach((k) => keus.append(h('option', { value: k.id }, k.naam)));
+              if (!(d.kandidaten || []).length) keus.replaceChildren(h('option', { value: '' }, 'Geen spelers met deze club op ja'));
+            } catch (e) {}
+            rij.hidden = false;
+          });
+          const rij = h('div', { class: 'boekrij', hidden: true }, keus, stuur);
+          vak.push(h('div', {}, laad), rij);
+        }
+        blokken.push(h('div', { class: 'beslisvak' }, vak));
+      } else if (p.geboekt && p.doeIkMee && uren > 0) {
+        blokken.push(h('div', { class: 'hint' }, gratisTekst(p)));
+      }
+
+      if (p.vanMij || isBeheerder) knoppen.push(knop('Partij verwijderen', 'link', () => { if (confirm('Deze partij verwijderen? Iedereen die erbij staat wordt afgemeld (zonder e-mail).')) doe('/verwijderen'); }));
+
+      const stand = p.geboekt ? (p.compleet || drie ? 'geboekt' : 'open') : 'gepland';
+      const badge = !p.geboekt ? h('span', { class: 'badge oranje' }, 'baan wordt geboekt')
+        : p.compleet ? h('span', { class: 'badge' }, '4 van 4 bevestigd · gaat door')
+        : drie ? h('span', { class: 'badge' }, 'gaat door met drie')
+        : h('span', { class: 'badge rood' }, bevestigd + ' van 4 bevestigd');
+      const spelerRij = (d) => h('li', {}, d.ik ? h('strong', {}, d.naam + ' (jij)') : h('span', {}, d.naam),
+        d.status === 'bevestigd' ? h('span', { class: 'sp-ok' }, ' ✓ bevestigd') : d.status === 'gepland' ? h('span', { class: 'sp-wacht' }, ' · uitnodiging na het boeken') : h('span', { class: 'sp-wacht' }, ' … nog niet bevestigd' + (d.reactieTot ? ' (tot ' + klok(d.reactieTot) + ')' : '')),
+        d.boekt ? h('span', { class: 'hint' }, ' · boeker') : null,
+        d.telefoon && !d.ik ? h('span', { class: 'nummer' }, h('a', { href: 'tel:' + d.telefoon.replace(/-/g, '') }, d.telefoon), h('a', { class: 'wa', href: d.whatsapp, target: '_blank', rel: 'noopener' }, 'Stuur bericht via WhatsApp')) : null,
+        p.geboekt && p.betaallink && !d.boekt && d.status === 'bevestigd' ? betaalStand(d) : null);
+      function betaalStand(d) {
+        const mag = d.ik || p.boekerIkke || isBeheerder;
+        const k = mag ? knop(d.betaald ? 'toch niet' : (d.ik ? 'Ik heb betaald' : 'markeer als betaald'), 'link', () => doe(d.betaald ? '/nietbetaald' : '/betaald', { spelerId: d.id })) : null;
+        return h('span', {}, d.betaald ? h('span', { class: 'sp-ok' }, ' · betaald') : h('span', { class: 'sp-wacht' }, ' · nog niet betaald'), k ? ' ' : null, k);
+      }
+      const open = Math.max(0, 4 - p.deelnemers.length);
+      const kaart = h('div', { class: 'moment st-' + (stand === 'open' ? 'open-partij' : stand), id: 'partij-' + p.id },
         h('h3', {}, dagLabel(p.datum) + ', ' + p.tijd + '–' + eindTijd(p.tijd, p.duur) + ' · ' + clubNaam(p.clubId), badge),
-        p.mijnStatus === 'uitgenodigd' ? h('div', { class: 'let' }, 'Je bent uitgenodigd voor deze partij. Doe je mee?') : null,
-        h('div', {}, 'Spelers (' + p.deelnemers.filter((d) => d.status === 'bevestigd').length + '/4 bevestigd):'), spelers4,
+        h('div', {}, 'Spelers (' + bevestigd + ' van 4 bevestigd):'),
+        h('ul', { class: 'spelerlijst' }, ...p.deelnemers.map(spelerRij), ...Array.from({ length: open }, () => h('li', { class: 'sp-open' }, 'nog een speler nodig'))),
+        p.afgemeld && p.afgemeld.length ? h('div', { class: 'hint' }, 'Afgemeld: ' + p.afgemeld.join(', ')) : null,
         p.reserves.length ? h('div', { class: 'hint' }, 'Reserve: ', naamLijst(p.reserves)) : null,
-        boekInfo,
-        p.opmerking ? h('div', { class: 'hint' }, p.opmerking) : null,
+        p.mijnStatus === 'bevestigd' && !p.deelnemers.some((d) => !d.ik && d.telefoon) && p.deelnemers.length > 1 ? h('div', { class: 'hint' }, 'De 06-nummers van je medespelers verschijnen zodra zij ook hebben bevestigd.') : null,
+        ...blokken,
         h('div', { class: 'boekrij' }, knoppen), melding);
+      if (gevraagd && String(p.id) === gevraagd) setTimeout(() => kaart.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+      return kaart;
     }));
   }
 
@@ -1229,6 +1275,7 @@
     $('tab-login').setAttribute('aria-pressed', String(m === 'login'));
     $('tab-signup').setAttribute('aria-pressed', String(m === 'signup'));
     $('signup-naam-veld').hidden = m !== 'signup';
+    $('signup-tel-veld').hidden = m !== 'signup';
     $('login-knop').textContent = m === 'signup' ? 'Account maken' : 'Inloggen';
     $('wachtwoord').autocomplete = m === 'signup' ? 'new-password' : 'current-password';
     $('vergeten').hidden = m === 'signup';
@@ -1269,7 +1316,7 @@
     // Je begint bij Geplande partijen (of het tabblad uit de link); zonder vaste instellingen eerst die invullen.
     const tabs = ['planning', 'beschikbaarheid', 'instellingen', 'beheer'];
     toonTab(!ik() ? 'instellingen' : tabs.includes(vraagTab) ? vraagTab : 'planning');
-    if (vraagTab || vraagWeek) history.replaceState(null, '', location.pathname);
+    if ((vraagTab || vraagWeek) && !q.get('partij')) history.replaceState(null, '', location.pathname);
   }
 
   async function loguit() {
@@ -1297,6 +1344,10 @@
       if (modus === 'signup') {
         const naam = $('signup-naam').value.trim();
         if (!naam) { meld('login-melding', 'Vul je naam in.', 'fout'); return; }
+        const tel = $('signup-tel').value.trim();
+        if (!/^(?:\+31|0031|0)6\d{8}$/.test(tel.replace(/[\s\-().]/g, ''))) { meld('login-melding', 'Vul je 06-nummer in (bijv. 06-12345678). Dat is nodig om een partij te bevestigen.', 'fout'); return; }
+        // Het nummer wordt opgeslagen zodra je je vaste instellingen opslaat (nooit in je account of in e-mails).
+        try { localStorage.setItem('pp_telefoon', tel); } catch (e) {}
         const u = await Auth.signup(email, ww, { full_name: naam });
         if (u.confirmedAt) { await naIngelogd(u); }
         else meld('login-melding', 'Bijna klaar: bevestig je account via de link in de e-mail die we je hebben gestuurd.', 'ok');
@@ -1351,21 +1402,34 @@
     if (!naam) { meld('profiel-melding', 'Vul je naam in.', 'fout'); $('naam').focus(); return; }
     if (!niveau) { meld('profiel-melding', 'Kies je speelsterkte.', 'fout'); return; }
     if (!duren.length) { meld('profiel-melding', 'Kies minstens één speelduur (1 uur en/of 1,5 uur).', 'fout'); return; }
-    if (Object.values(clubVoorkeur).every((v) => v === 'niet')) { meld('profiel-melding', 'Kies minstens één club waar je wel wilt spelen.', 'fout'); return; }
+    if (Object.values(clubVoorkeur).every((v) => v === 'niet')) { meld('profiel-melding', 'Zet minstens één club op ja.', 'fout'); return; }
     const nieuw = !ik();
     try {
       const r = await fetch('/api/profiel', {
         method: 'PUT', headers: headers({ 'content-type': 'application/json' }),
-        body: JSON.stringify({ naam, niveau, wensNiveaus, duren, frequentie: $('frequentie').value, rustDagen: Number($('rust-dagen').value), clubVoorkeur, mailAan: $('mail-aan').checked, herinneringAan: $('herinnering-aan').checked })
+        body: JSON.stringify({ naam, niveau, wensNiveaus, duren, frequentie: $('frequentie').value, rustDagen: Number($('rust-dagen').value), clubVoorkeur, mailAan: $('mail-aan').checked, herinneringAan: $('herinnering-aan').checked, boekBereid: $('boek-bereid').checked, telefoon: $('telefoon').value.trim() })
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.fout || 'Opslaan mislukt.');
+      try { localStorage.removeItem('pp_telefoon'); } catch (e) {}
       meld('profiel-melding', nieuw ? 'Opgeslagen. Vul nu je beschikbaarheid per week in.' : 'Instellingen bijgewerkt.', 'ok');
       await laadSpelers();
       actieveWeek = null;
       toonAlles();
       if (nieuw) setTimeout(() => toonTab('beschikbaarheid'), 900);
     } catch (err) { meld('profiel-melding', err.message, 'fout'); }
+  });
+
+  // ---- Account verwijderen ----
+  $('account-weg').addEventListener('click', async () => {
+    if (!confirm('Weet je zeker dat je je account wilt verwijderen? Je 06-nummer, instellingen en beschikbaarheid worden gewist.')) return;
+    try {
+      const r = await fetch('/api/account', { method: 'DELETE', headers: headers() });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.fout || 'Verwijderen mislukt.');
+      try { await Auth.logout(); } catch (e) {}
+      location.href = '/';
+    } catch (err) { meld('account-melding', err.message, 'fout'); }
   });
 
   // ---- Gebeurtenissen ----

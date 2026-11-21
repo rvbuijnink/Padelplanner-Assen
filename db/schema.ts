@@ -21,6 +21,8 @@ export const spelers = pgTable("spelers", {
   mailAan: boolean("mail_aan").notNull().default(true),
   // Of de speler op zondagavond een herinnering wil als er nog weken zonder beschikbaarheid zijn.
   herinneringAan: boolean("herinnering_aan").notNull().default(true),
+  // Of de speler bereid is de baan te boeken (en een Tikkie te maken).
+  boekBereid: boolean("boek_bereid").notNull().default(true),
   // Standaardweek: weekdag ("0" = maandag … "6" = zondag) -> tijden "UU:MM-UU:MM".
   // Geldt voor elke week die de speler niet zelf heeft ingevuld. Leeg = geen standaardweek.
   standaardWeek: jsonb("standaard_week").$type<Record<string, string[]>>(),
@@ -81,6 +83,20 @@ export const partijen = pgTable("partijen", {
   // Geannuleerd: er konden niet genoeg spelers en er was geen vervanger. De partij blijft bewaard,
   // zodat wie afzegde of niet reageerde die dag niet opnieuw wordt ingepland.
   geannuleerd: boolean().notNull().default(false),
+  // Uiterste moment waarop de aangewezen boeker de baan moet boeken; daarna wijst de site de volgende bereidwillige speler aan.
+  boekenTot: timestamp("boeken_tot", { withTimezone: true }),
+  // Prijs van de baan (uit de live koppeling bij het plannen); het bedrag per persoon is dit gedeeld door 4.
+  baanPrijs: doublePrecision("baan_prijs"),
+  // Spelers die het boeken hebben laten lopen of hebben doorgegeven: die worden niet opnieuw als boeker gevraagd.
+  afgewezenBoekers: jsonb("afgewezen_boekers").$type<number[]>().notNull().default([]),
+  // Keuze van de boeker als er tussen 72 en 50 uur voor aanvang een speler ontbreekt: "zoeken" of "drie" (doorgaan met drie).
+  besluit: text(),
+  // Of de boeker al gevraagd is te kiezen (72 uur) en te beslissen (50 uur).
+  keuzeGemeld: boolean("keuze_gemeld").notNull().default(false),
+  beslisGemeld: boolean("beslis_gemeld").notNull().default(false),
+  // De boeker zei af: een andere speler is aangewezen en moet de baan nog overnemen van de vorige boeker.
+  overnameNodig: boolean("overname_nodig").notNull().default(false),
+  vorigeBoekerId: integer("vorige_boeker_id").references(() => spelers.id, { onDelete: "set null" }),
   aangemaakt: timestamp("aangemaakt", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -91,15 +107,33 @@ export const partijDeelnemers = pgTable(
     partijId: integer("partij_id").notNull().references(() => partijen.id, { onDelete: "cascade" }),
     spelerId: integer("speler_id").notNull().references(() => spelers.id, { onDelete: "cascade" }),
     aangemeld: timestamp("aangemeld", { withTimezone: true }).notNull().defaultNow(),
-    // "uitgenodigd" (wacht op antwoord), "bevestigd", "afgezegd", "verlopen" (niet op tijd gereageerd)
+    // "gepland" (gekozen, wacht tot de baan geboekt is; nog niet uitgenodigd), "uitgenodigd" (wacht op antwoord), "bevestigd", "afgezegd", "verlopen" (niet op tijd gereageerd)
     // of "geannuleerd" (de partij ging niet door; deze speler kan die dag gewoon opnieuw worden ingepland).
     status: text().notNull().default("bevestigd"),
     // Geheime sleutel voor de knoppen in de e-mail (bevestigen zonder inloggen).
     token: text().unique(),
     uitgenodigd: timestamp("uitgenodigd", { withTimezone: true }),
+    // Uiterste reactietijd. De klok loopt niet tussen 22:00 en 08:00.
+    reactieTot: timestamp("reactie_tot", { withTimezone: true }),
     herinnerd: boolean().notNull().default(false),
     // Of deze speler zijn deel van de baan heeft betaald aan wie boekte.
     betaald: boolean().notNull().default(false),
   },
   (t) => [primaryKey({ columns: [t.partijId, t.spelerId] })]
 );
+
+// 06-nummers staan los van de spelers, met row level security in de database:
+// een speler ziet alleen zijn eigen nummer en dat van bevestigde medespelers van een partij die hij zelf heeft bevestigd,
+// tot een dag na de partij. Zie de migratie "beveilig_telefoons". Nummers komen nooit in een e-mail.
+export const telefoons = pgTable("telefoons", {
+  spelerId: integer("speler_id").primaryKey().references(() => spelers.id, { onDelete: "cascade" }),
+  nummer: text().notNull(),
+  bijgewerkt: timestamp("bijgewerkt", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Tussen 22:00 en 08:00 gaan er geen e-mails uit: die wachten hier tot de ochtend.
+export const mailWachtrij = pgTable("mail_wachtrij", {
+  id: serial().primaryKey(),
+  mail: jsonb().notNull(),
+  aangemaakt: timestamp("aangemaakt", { withTimezone: true }).notNull().defaultNow(),
+});

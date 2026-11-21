@@ -52,22 +52,24 @@
   const p = info.partij;
   const club = clubs.find((c) => c.id === p.clubId);
   const statusTekst = {
-    uitgenodigd: 'Je hebt nog niet gereageerd.',
+    uitgenodigd: 'Je hebt nog niet gereageerd.' + (info.reactieTot ? ' Reageer vóór ' + new Date(info.reactieTot).toLocaleString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + '.' : ''),
+    gepland: 'De baan wordt eerst geboekt. Daarna krijg je een uitnodiging.',
     bevestigd: info.reserve ? 'Je staat op de reservelijst.' : 'Je hebt bevestigd dat je meedoet.',
     afgezegd: 'Je hebt afgezegd.',
     geannuleerd: 'Deze partij gaat niet door: er konden niet genoeg spelers.',
     verlopen: 'Je hebt niet op tijd gereageerd, dus je plek is aan iemand anders gegeven. Je kunt je nog wel opgeven; is de partij vol, dan kom je op de reservelijst.'
   }[info.status] || '';
   const lijst = el('ul');
-  info.spelers.forEach((s) => lijst.append(el('li', null, s.naam + (s.status === 'uitgenodigd' ? ' (nog geen antwoord)' : ' ✓'))));
+  info.spelers.forEach((s) => lijst.append(el('li', null, s.naam + (s.status === 'bevestigd' ? ' ✓' : ' (nog geen antwoord)'))));
   const melding = el('div', 'melding');
-  const laatste = info.status === 'uitgenodigd' && info.spelers.length === 4 && info.spelers.filter((s) => s.status === 'bevestigd').length === 3;
-  const ja = el('button', 'ja', 'Ik doe mee'), nee = el('button', 'nee', 'Kan toch niet');
+  const laatste = false;
+  const ja = el('button', 'ja', 'Ik doe mee'), nee = el('button', 'nee', 'Ik kan niet');
   if (keuze === 'ja') ja.classList.add('gekozen');
   if (keuze === 'nee') nee.classList.add('gekozen');
   kaart.replaceChildren(...[
     el('h1', null, 'Hoi ' + info.naam + ', doe je mee?'),
     el('p', null, dag(p.datum) + ' van ' + p.tijd + ' tot ' + eind(p.tijd, p.duur) + (club ? ' bij ' + club.naam : '')),
+    info.bedrag != null ? el('p', null, 'Bedrag: ' + info.bedrag.toLocaleString('nl-NL', { style: 'currency', currency: 'EUR' }) + ' per persoon') : null,
     el('p', 'zacht', 'Spelers:'), lijst,
     el('p', info.status === 'verlopen' ? 'let' : 'zacht', statusTekst),
     laatste ? el('p', 'let', 'De andere drie hebben al bevestigd. Doe je mee, dan ben jij de vierde en boek je meteen de baan' + (club ? ' bij ' + club.naam : '') + '.') : null,
@@ -84,6 +86,12 @@
       const d = await r.json();
       if (!r.ok) throw new Error(d.fout || 'Dat lukte niet.');
       melding.className = 'melding ok'; melding.textContent = d.tekst;
+      if (d.betaallink) {
+        const t = el('a', 'knop ja', 'Betaal je deel via Tikkie' + (d.bedrag != null ? ' (' + d.bedrag.toLocaleString('nl-NL', { style: 'currency', currency: 'EUR' }) + ')' : '') + ' ↗');
+        t.href = d.betaallink; t.target = '_blank'; t.rel = 'noopener';
+        const rij = el('div', 'knoppen'); rij.append(t); melding.append(rij);
+      }
+      if (a === 'ja') melding.append(el('p', 'zacht', 'De 06-nummers van je bevestigde medespelers staan op de partijpagina in de Padelplanner.'));
       if (d.boeken && d.boeken.url) {
         const boek = el('a', 'knop ja', 'Boek nu bij ' + d.boeken.club + ' ↗');
         boek.href = d.boeken.url; boek.target = '_blank'; boek.rel = 'noopener';

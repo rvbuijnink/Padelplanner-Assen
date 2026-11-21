@@ -4,7 +4,11 @@
 // - Brevo: BREVO_API_KEY en MAIL_AFZENDER (een in Brevo geverifieerd adres).
 // - Resend: RESEND_API_KEY en MAIL_AFZENDER.
 // Zonder instellingen worden er geen e-mails verstuurd; de site blijft gewoon werken (uitnodigingen staan ook op de site).
+// Tussen 22:00 en 08:00 (Nederlandse tijd) gaan er geen e-mails uit: die komen in een wachtrij en gaan om 08:00 de deur uit.
 import nodemailer from "nodemailer";
+import { asc, inArray } from "drizzle-orm";
+import { db } from "../db/index.js";
+import { mailWachtrij } from "../db/schema.js";
 
 // Bijlage als tekst (bijv. een agenda-afspraak .ics).
 export type Bijlage = { naam: string; inhoud: string; type: string };
@@ -88,9 +92,36 @@ async function verstuurEen(m: Mail) {
   if (!r.ok) throw new Error(`E-mail versturen mislukt: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
 }
 
-// Verstuurt alle mails; een mislukte mail houdt de rest niet tegen.
+// Nederlandse tijd in minuten sinds middernacht.
+export function nlMinuten(ms = Date.now()) {
+  const [u, m] = new Date(ms).toLocaleTimeString("en-GB", { timeZone: "Europe/Amsterdam", hour: "2-digit", minute: "2-digit", hour12: false }).split(":").map(Number);
+  return (u % 24) * 60 + m;
+}
+export const STIL_VAN = 22 * 60, STIL_TOT = 8 * 60;
+export const isStil = (ms = Date.now()) => { const m = nlMinuten(ms); return m >= STIL_VAN || m < STIL_TOT; };
+
+// Verstuurt alle mails; een mislukte mail houdt de rest niet tegen. 's Nachts gaan ze in de wachtrij.
 export async function verstuur(mails: Mail[]) {
   if (!mails.length) return;
+  if (isStil()) {
+    await db.insert(mailWachtrij).values(mails.map((m) => ({ mail: m })));
+    console.log(`Stille uren: ${mails.length} e-mail(s) in de wachtrij tot 08:00.`);
+    return;
+  }
+  await verstuurNu(mails);
+}
+
+// Na 08:00: alles uit de wachtrij versturen.
+export async function verstuurWachtrij() {
+  if (isStil()) return 0;
+  const rijen = await db.select().from(mailWachtrij).orderBy(asc(mailWachtrij.id)).limit(200);
+  if (!rijen.length) return 0;
+  await db.delete(mailWachtrij).where(inArray(mailWachtrij.id, rijen.map((r) => r.id)));
+  await verstuurNu(rijen.map((r) => r.mail as Mail));
+  return rijen.length;
+}
+
+async function verstuurNu(mails: Mail[]) {
   if (!mailAan()) {
     console.log(`E-mail staat uit (geen sleutel of afzender ingesteld); ${mails.length} e-mail(s) niet verstuurd.`);
     return;
