@@ -335,10 +335,9 @@ async function slaProfielOp(user: Gebruiker, b: any) {
     clubVoorkeur[c] = v;
   }
   if (CLUBS.every((c) => clubVoorkeur[c] === "niet")) return fout("Zet minstens één club op ja.");
-  // 06-nummer: verplicht om een partij te bevestigen; leeg laten = verwijderen.
-  const metTelefoon = "telefoon" in b;
-  const telefoon = metTelefoon ? leesTelefoon(b.telefoon) : null;
-  if (telefoon === undefined) return fout("Vul een geldig 06-nummer in (bijv. 06-12345678), of laat het veld leeg.");
+  // 06-nummer: verplicht. Zonder nummer kan een speler niet bevestigen en zou een partij vastlopen.
+  const telefoon = leesTelefoon(b.telefoon);
+  if (!telefoon) return fout("Vul je 06-nummer in (bijv. 06-12345678). Dat is verplicht: zonder nummer kun je niet worden ingepland.");
 
   const waarden = {
     naam,
@@ -375,10 +374,8 @@ async function slaProfielOp(user: Gebruiker, b: any) {
   } else {
     await db.insert(spelers).values({ slug: key, userId: user.id, ...waarden });
   }
-  if (metTelefoon) {
-    const nu = await mijnSpeler(user);
-    if (nu) await slaTelefoonOp(nu.id, telefoon);
-  }
+  const nu = await mijnSpeler(user);
+  if (nu) await slaTelefoonOp(nu.id, telefoon);
   return json({ ok: true });
 }
 

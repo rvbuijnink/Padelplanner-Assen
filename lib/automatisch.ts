@@ -442,7 +442,7 @@ async function werkBij(ctx: Context, p: Partij, mails: Mail[], laatste?: number)
     const groep = spelendVan(p).map((r) => spelerVan(ctx, r.spelerId)).filter(Boolean) as Speler[];
     const nieuw: Speler[] = [];
     const kandidaten = ctx.spelers
-      .filter((s) => !p.rijen.some((r) => r.spelerId === s.id))
+      .filter((s) => ctx.metTelefoon.has(s.id) && !p.rijen.some((r) => r.spelerId === s.id))
       .sort((a, b) => aantalPartijen(ctx, a) - aantalPartijen(ctx, b) || a.id - b.id);
     for (const s of kandidaten) {
       if (groep.length + nieuw.length >= MAX_SPELERS) break;
@@ -684,7 +684,7 @@ export async function kandidatenVoor(partijId: number) {
   const p = ctx.partijen.find((x) => x.id === partijId);
   if (!p) return [];
   return ctx.spelers
-    .filter((s) => clubJa(s, p.clubId, p.datum) && !p.rijen.some((r) => r.spelerId === s.id && (isActief(r) || nietOpDag(r))) && !speeltAlOpDag(ctx, s.id, p.datum, p.id))
+    .filter((s) => ctx.metTelefoon.has(s.id) && clubJa(s, p.clubId, p.datum) && !p.rijen.some((r) => r.spelerId === s.id && (isActief(r) || nietOpDag(r))) && !speeltAlOpDag(ctx, s.id, p.datum, p.id))
     .map((s) => ({ id: s.id, naam: s.naam }))
     .sort((a, b) => a.naam.localeCompare(b.naam));
 }
@@ -768,7 +768,9 @@ async function zoekNieuwePartijen(ctx: Context, mails: Mail[]) {
   const geprobeerd = new Set<string>();
   const genoegGezocht = () => checks >= MAX_BAAN_CHECKS || Date.now() - begin > MAX_ZOEKTIJD;
   while (gemaakt < MAX_NIEUW_PER_RUN && !genoegGezocht()) {
-    const pool = ctx.spelers.filter((s) => dagen.some((d) => heeftRuimte(ctx, s, d))).map((s) => zonderAfgezegdeDagen(ctx, s, dagen));
+    // Alleen spelers met een 06-nummer (anders kunnen ze niet bevestigen en loopt de partij vast).
+    const pool = ctx.spelers.filter((s) => ctx.metTelefoon.has(s.id) && dagen.some((d) => heeftRuimte(ctx, s, d)))
+      .map((s) => ({ ...zonderAfgezegdeDagen(ctx, s, dagen), kanBoeken: kanBoeken(ctx, s) }));
     if (pool.length < MAX_SPELERS) break;
     const kandidaten = volgorde(P.plan(pool, ctx.clubs, vandaagDatum, KANDIDATEN, dagen), ronde);
     let gekozen: { k: any; groep: Speler[]; duur: number; clubId: string; tijd: string; prijs: number } | null = null;

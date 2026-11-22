@@ -313,8 +313,8 @@
         </fieldset>
         <fieldset>
           <legend><label for="telefoon">06-nummer</label></legend>
-          <p class="hint">Alleen zichtbaar voor de andere spelers van een partij die jij hebt bevestigd (tot een dag na de partij). Het staat nooit in een e-mail. Nodig om een partij te bevestigen; leeg maken verwijdert je nummer.</p>
-          <input type="tel" id="telefoon" autocomplete="tel" inputmode="tel" placeholder="06-12345678">
+          <p class="hint">Alleen zichtbaar voor de andere spelers van een partij die jij hebt bevestigd (tot een dag na de partij). Het staat nooit in een e-mail. Verplicht: zonder 06-nummer kun je niet worden ingepland.</p>
+          <input type="tel" id="telefoon" required autocomplete="tel" inputmode="tel" placeholder="06-12345678">
         </fieldset>
         <fieldset id="niveau-veld">
           <legend><label for="niveau">Speelsterkte: op welk niveau speel je ongeveer?</label></legend>
@@ -440,7 +440,7 @@
       <button type="button" class="rustig" id="ververs">Vernieuw</button>
       <div class="uitleg" style="margin:14px 0 0">
         <ol class="stappen">
-          <li><span class="nr">1.</span><div><strong>Match.</strong> Elk uur tussen 08:00 en 17:00 zoekt de site vier spelers die passen bij elkaars <em>Vaste instellingen</em> en beschikbaarheid, van 7 dagen tot zo ver vooruit als de clubs te boeken zijn, bij een club die iedereen op ja heeft en waar een baan vrij is. Geen vrije baan? Dan geen partij.</div></li>
+          <li><span class="nr">1.</span><div><strong>Match.</strong> Elk uur tussen 08:00 en 17:00 zoekt de site vier spelers die passen bij elkaars <em>Vaste instellingen</em> en beschikbaarheid, van 7 dagen tot zo ver vooruit als de clubs te boeken zijn, bij een club die iedereen op ja heeft en waar een baan vrij is. Minstens één van de vier moet bereid zijn te boeken, en alle vier moeten een 06-nummer hebben ingevuld. Geen vrije baan? Dan geen partij.</div></li>
           <li><span class="nr">2.</span><div><strong>Boeken.</strong> Eén speler die wil boeken krijgt een mail en heeft 4 uur. Na het boeken zet die een Tikkie bij de geplande partij.</div></li>
           <li><span class="nr">3.</span><div><strong>Bevestigen.</strong> Daarna krijgen de andere spelers een uitnodiging en 12 uur tijd om te reageren (de klok staat stil van 22:00 tot 08:00). Je 06-nummer (in te vullen bij <em>Vaste instellingen</em>) is nodig. Wie niet reageert, wordt vervangen.</div></li>
           <li><span class="nr">4.</span><div><strong>Gaat door.</strong> Alle vier bevestigd? De partij gaat door en iedereen krijgt een mail. Op de dag zelf volgt een herinnering. De 06-nummers van bevestigde medespelers staan bij de geplande partij, nooit in de mail.</div></li>
@@ -1012,7 +1012,7 @@
       if (p.mijnStatus === 'uitgenodigd') {
         const mijn = p.deelnemers.concat(p.reserves).find((d) => d.ik);
         blokken.push(h('div', { class: 'let' }, 'Je bent uitgenodigd. Bedrag: ' + bedragTekst + '.', mijn && mijn.reactieTot ? h('div', {}, 'Reageer vóór ', h('span', { class: 'klok' }, klok(mijn.reactieTot)), '.') : null));
-        if (!(ik() && ik().telefoon)) blokken.push(h('div', { class: 'melding fout' }, 'Vul eerst je 06-nummer in bij Vaste instellingen; dat is nodig om te bevestigen.'));
+        if (!(ik() && ik().telefoon)) blokken.push(h('div', { class: 'melding fout' }, 'Vul eerst je 06-nummer in bij Vaste instellingen. Zonder 06-nummer word je niet ingepland.'));
         knoppen.push(knop('Ik doe mee', '', () => doe('/aanmelden')), knop('Ik kan niet', 'rustig', () => doe('/afmelden')));
       } else if (p.doeIkMee && p.mijnStatus === 'bevestigd') {
         if (!isReserve && (p.compleet || p.geboekt)) knoppen.push(knop('📅 Zet in agenda', 'rustig', () => zetInAgenda(p)));
@@ -1401,6 +1401,7 @@
     if (!niveau) { meld('profiel-melding', 'Kies je speelsterkte.', 'fout'); return; }
     if (!duren.length) { meld('profiel-melding', 'Kies minstens één speelduur (1 uur en/of 1,5 uur).', 'fout'); return; }
     if (Object.values(clubVoorkeur).every((v) => v === 'niet')) { meld('profiel-melding', 'Zet minstens één club op ja.', 'fout'); return; }
+    if (!/^(?:\+31|0031|0)6\d{8}$/.test($('telefoon').value.replace(/[\s\-().]/g, ''))) { meld('profiel-melding', 'Vul je 06-nummer in (bijv. 06-12345678). Dat is verplicht: zonder nummer kun je niet worden ingepland.', 'fout'); $('telefoon').focus(); return; }
     const nieuw = !ik();
     try {
       const r = await fetch('/api/profiel', {

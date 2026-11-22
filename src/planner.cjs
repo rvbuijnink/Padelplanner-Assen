@@ -326,7 +326,9 @@
           if (duren.length) beschikbaar.push(Object.assign({}, r, { duren, rest }));
         }
         if (beschikbaar.length < 4) { vorige = null; continue; }
-        const groepen = groepenVanVier(beschikbaar, clubs, d);
+        // Spelers met kanBoeken === false (niet bereid of geen 06-nummer) kunnen de baan niet boeken:
+        // een groepje moet minstens één speler hebben die dat wel kan.
+        const groepen = groepenVanVier(beschikbaar, clubs, d).filter((g) => g.spelers.some((p) => p.kanBoeken !== false));
         if (!groepen.length) { vorige = null; continue; }
         const namen = new Set();
         groepen.forEach((g) => g.spelers.forEach((p) => namen.add(p.naam)));
