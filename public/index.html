@@ -207,7 +207,7 @@
   .tijdvakken:empty { display:none; }
   .leeg { color:var(--zacht); font-size:.9rem; padding-top:4px; }
   .tijdvak { display:grid; grid-template-columns:1fr auto auto; align-items:start; gap:10px; width:100%; padding:8px 10px; border-radius:10px; background:var(--veld); border:1px solid var(--lijn); }
-  .tijdvak .tijden { font-size:.9rem; font-weight:600; font-variant-numeric:tabular-nums; padding-top:3px; white-space:nowrap; min-width:7.5em; color:var(--accent); }
+  .tijdvak .tijden { font-size:.9rem; font-weight:600; font-variant-numeric:tabular-nums; padding-top:3px; white-space:nowrap; min-width:5.5em; color:var(--accent); display:flex; flex-direction:column; line-height:1.3; }
   .tijdvak .weg { padding:0 9px; line-height:26px; font-size:1.1rem; background:transparent; color:var(--zacht); border-color:var(--lijn); }
   .tijdvak .weg:hover { color:var(--fout); border-color:var(--fout); box-shadow:none; }
   button.link { background:transparent; border:0; color:var(--accent); padding:2px 0; font-size:.92rem; font-weight:600; }
@@ -408,7 +408,7 @@
       <div class="weken" id="weken"></div>
       <h3 id="week-titel" style="margin:0 0 8px;font-size:1.02rem"></h3>
       <p class="hint" id="week-status"></p>
-      <p class="hint">Klik bij een dag op <em>Tijd kiezen</em> en schuif de bolletjes naar het moment waarop je kunt beginnen en waarop je klaar moet zijn. Kun je op een dag op meerdere momenten, bijvoorbeeld 's ochtends en 's avonds? Klik dan op <em>Nog een tijd op deze dag</em>. De planner zoekt daarbinnen een starttijd voor 1 uur of 1,5 uur.</p>
+      <p class="hint">Geef per dag aan <strong>vanaf hoe laat</strong> en <strong>tot hoe laat</strong> je kunt. Klik bij een dag op <em>Tijd kiezen</em>: zet het linker bolletje op het vroegste moment waarop je kunt beginnen en het rechter bolletje op het moment waarop je uiterlijk klaar moet zijn. De planner plant de partij (1 of 1,5 uur) altijd helemaal binnen die tijden. Voorbeeld: kies je <strong>van 19:00 tot 22:00</strong>, dan begint een partij van 1,5 uur ergens tussen 19:00 en 20:30. Kun je op een dag op twee momenten, bijvoorbeeld 's ochtends en 's avonds? Klik dan op <em>Nog een tijd op deze dag</em>.</p>
       <div id="raster"></div>
       <div class="knoppen">
         <button type="button" id="week-opslaan">Week opslaan</button>
@@ -677,7 +677,7 @@
       schuif.style.setProperty('--tot', b);
       van.setAttribute('aria-valuetext', stapTijd(a));
       tot.setAttribute('aria-valuetext', stapTijd(b));
-      tijden.textContent = stapTijd(a) + ' – ' + stapTijd(b);
+      tijden.replaceChildren(h('span', {}, 'van ' + stapTijd(a)), h('span', {}, 'tot ' + stapTijd(b)));
     };
     c.id = () => { const [a, b] = c.bereik(); return stapTijd(a) + '-' + stapTijd(b); };
     function schuiven(e) {
