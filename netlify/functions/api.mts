@@ -389,7 +389,9 @@ async function slaBeschikbaarheidOp(user: Gebruiker, b: any) {
   const week = b.week;
   if (typeof week !== "string" || !DATUM.test(week) || !isMaandag(week)) return fout("Ongeldige week.");
   const tot = dagenTussen(vandaag(), week);
-  if (tot < -7) return fout("Deze week is al voorbij.");
+  // Minstens een week vooruit: de site plant niet korter van tevoren. Van de eerste week tellen dus alleen
+  // de dagen vanaf 7 dagen na vandaag; eerdere dagen worden genegeerd.
+  if (tot + 6 < P.MIN_DAGEN_VOORUIT) return fout("Beschikbaarheid kun je alleen invullen voor dagen die minstens een week vooruit liggen.");
   if (tot > MAX_WEKEN_VOORUIT * 7) return fout("Deze week ligt te ver vooruit.");
 
   const tijdvakken: Record<string, string[]> = {};
@@ -401,7 +403,7 @@ async function slaBeschikbaarheidOp(user: Gebruiker, b: any) {
     const sl = invoer[d];
     const tijden = Array.isArray(sl) && sl.length <= 12 ? leesTijden(sl) : null;
     if (!tijden) return fout("Ongeldige tijd.");
-    if (tijden.length) tijdvakken[d] = tijden;
+    if (tijden.length && dagenTussen(vandaag(), d) >= P.MIN_DAGEN_VOORUIT) tijdvakken[d] = tijden;
   }
 
   await db
