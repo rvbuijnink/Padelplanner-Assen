@@ -78,6 +78,8 @@
   // Of een dag bij een club al open is en wat een baan kost, komt live uit het boekingssysteem van de club.
   const HORIZON_STANDAARD = 31;
   const HORIZON_MAX = 6 * 7;
+  // De site plant minstens een week vooruit; beschikbaarheid voor eerdere dagen heeft geen zin.
+  const MIN_DAGEN_VOORUIT = 7;
   const FREQUENTIES = [
     { id: 'wanneer-het-lukt', label: 'Wanneer het lukt' },
     { id: 'tweewekelijks', label: 'Om de week' },
@@ -412,7 +414,7 @@
 
   return {
     NIVEAUS, NIVEAU_MIN, NIVEAU_MAX, NIVEAU_STAP, niveauGetal, rangeVan, geldigNiveau, niveauLabel, wensBereik, geldigeWens, wilMet, wensLabel, DUREN, SLOTS, OUDE_SLOTS, DAG_VAN, DAG_TOT, STAP, VENSTER_DAGEN,
-    naarMin, naarTijd, leesTijd, tijdId, tijdLabel, tijdenVan, normaliseer, vrijVanaf, WEKEN_ZICHTBAAR, HORIZON_STANDAARD, HORIZON_MAX, VOORKEUREN, FREQUENTIES,
+    naarMin, naarTijd, leesTijd, tijdId, tijdLabel, tijdenVan, normaliseer, vrijVanaf, WEKEN_ZICHTBAAR, HORIZON_STANDAARD, HORIZON_MAX, MIN_DAGEN_VOORUIT, VOORKEUREN, FREQUENTIES,
     dagKey, parseKey, dagenTussen, volgendeDagen,
     maandagVan, weken, dagenVanWeek, boekingsHorizon, wekenBinnenHorizon, weekStatus, standaardVoorWeek, vulStandaardweek, beschikbaarVan, voorkeurVan, isLenteZomer, clubOk,
     compatibel, groepenVanVier, status, prijs, isDal, voegClubsSamen, liveClubs, boekLink, plan

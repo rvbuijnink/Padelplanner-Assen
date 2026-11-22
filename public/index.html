@@ -498,13 +498,16 @@
   const P = window.Planner;
   const today = new Date();
   // De weken en dagen lopen tot zo ver vooruit als je bij een club een baan kunt reserveren (na het laden van de clubs).
-  let weken = P.weken(today);
+  // Beschikbaarheid vul je pas in vanaf volgende week: de site plant minstens een week vooruit, dus deze week
+  // (en eerdere weken) doen niet meer mee.
+  let weken = P.weken(today).slice(1);
   let planDagen = [];
   let horizonDagen = P.HORIZON_STANDAARD;
   function zetPeriode() {
     horizonDagen = P.boekingsHorizon(clubs);
-    weken = P.wekenBinnenHorizon(today, clubs);
-    planDagen = [].concat(...weken.map(P.dagenVanWeek)).filter((d) => { const n = P.dagenTussen(today, P.parseKey(d)); return n >= 0 && n <= horizonDagen; });
+    const alleWeken = P.wekenBinnenHorizon(today, clubs);
+    weken = alleWeken.slice(1);
+    planDagen = [].concat(...alleWeken.map(P.dagenVanWeek)).filter((d) => { const n = P.dagenTussen(today, P.parseKey(d)); return n >= 0 && n <= horizonDagen; });
     const sel = $('kies-dag'), gekozen = sel.value;
     sel.replaceChildren(...planDagen.map((d) => h('option', { value: d }, dagLabel(d))));
     if (planDagen.includes(gekozen)) sel.value = gekozen;
@@ -628,7 +631,7 @@
 
   function standaardWeek() {
     const r = ik();
-    // De eerste week die nog niet is ingevuld, anders deze week
+    // De eerste week die nog niet is ingevuld, anders volgende week
     const open = weken.find((w) => P.weekStatus(r, w).soort === 'open');
     return open || weken[0];
   }
@@ -636,10 +639,10 @@
   function toonWeken() {
     const r = ik();
     if (!actieveWeek || !weken.includes(actieveWeek)) actieveWeek = standaardWeek();
-    $('weken-uitleg').textContent = 'Vul je beschikbaarheid in voor alle weken waarin je al een baan kunt reserveren. De planner kijkt tot ' + horizonDagen + ' dagen vooruit (t/m ' + dagLabel(planDagen[planDagen.length - 1]) + '); of een club die dag al open is, ziet hij live bij de club. Zo kan de planner een partij maken zodra er vier spelers kunnen en een baan vrij is. Je kunt het altijd nog aanpassen.';
+    $('weken-uitleg').textContent = 'Vul je beschikbaarheid in voor alle weken waarin je al een baan kunt reserveren. De site plant minstens een week vooruit, dus dagen die binnen een week vallen kun je niet meer invullen. De planner kijkt tot ' + horizonDagen + ' dagen vooruit (t/m ' + dagLabel(planDagen[planDagen.length - 1]) + '); of een club die dag al open is, ziet hij live bij de club. Zo kan de planner een partij maken zodra er vier spelers kunnen en een baan vrij is. Je kunt het altijd nog aanpassen.';
     $('weken').replaceChildren(...weken.map((w, i) => {
       const st = statusVan(r, w);
-      const titel = i === 0 ? 'Deze week' : i === 1 ? 'Volgende week' : 'Over ' + i + ' weken';
+      const titel = i === 0 ? 'Volgende week' : 'Over ' + (i + 1) + ' weken';
       const b = h('button', { type: 'button', 'aria-pressed': String(w === actieveWeek) },
         h('strong', {}, titel), h('small', {}, kortLabel(w) + ' – ' + kortLabel(P.dagenVanWeek(w)[6])), h('small', { class: st.klasse }, st.kort));
       b.addEventListener('click', () => { actieveWeek = w; toonWeken(); toonRaster(); meld('week-melding', ''); });
@@ -698,7 +701,7 @@
   function dagRij(d, tijden, uit, label, doel) {
     label = label || dagLabel(d);
     const box = h('div', { class: 'tijdvakken' });
-    const leeg = h('span', { class: 'leeg' }, uit ? 'Voorbij' : 'Niet beschikbaar');
+    const leeg = h('span', { class: 'leeg' }, uit ? (typeof uit === 'string' ? uit : 'Voorbij') : 'Niet beschikbaar');
     const knop = h('button', { type: 'button', class: 'link', disabled: uit });
     const rij = { lijst: [] };
     rij.toon = () => {
@@ -738,7 +741,11 @@
     $('week-status').textContent = r ? st.lang : 'Sla eerst je vaste instellingen op; daarna kun je per week je beschikbaarheid invullen.';
     const huidig = tijdvakken || (r && r.weken[w] ? r.weken[w].tijdvakken : {});
     dagRijen = {};
-    $('raster').replaceChildren(...P.dagenVanWeek(w).map((d) => dagRij(d, huidig[d] || [], P.dagenTussen(today, P.parseKey(d)) < 0)));
+    // Dagen binnen een week vanaf vandaag kun je niet meer invullen: zo kort van tevoren plant de site niet meer.
+    $('raster').replaceChildren(...P.dagenVanWeek(w).map((d) => {
+      const uit = P.dagenTussen(today, P.parseKey(d)) < P.MIN_DAGEN_VOORUIT;
+      return dagRij(d, uit ? [] : huidig[d] || [], uit ? 'Te kort dag' : false);
+    }));
   }
 
   function leesRaster(bron) {
