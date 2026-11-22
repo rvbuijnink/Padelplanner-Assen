@@ -244,6 +244,8 @@
 <div class="demo"><p>Vrije banen van Peakz Padel Assen, Valley Padel Assen, Plaza Sportz Assen, ATV De Hertenkamp en Padel Rolde worden live opgehaald.</p></div>
 
 <main>
+  <p id="laden" class="hint" role="status">Even laden…</p>
+
   <section id="login-sectie" hidden>
     <h2>Inloggen</h2>
     <div id="uitgelogd">
@@ -301,7 +303,7 @@
   </section>
 
   <!-- ===== Vaste instellingen ===== -->
-  <div class="paneel" id="paneel-instellingen">
+  <div class="paneel" id="paneel-instellingen" hidden>
     <section>
       <h2>Vaste instellingen</h2>
       <p class="hint">Deze vul je één keer in. Je kunt ze altijd aanpassen.</p>
@@ -1298,6 +1300,7 @@
 
   function toonAuth() {
     const aan = !!gebruiker;
+    $('laden').hidden = true;
     $('login-sectie').hidden = aan;
     $('app-kop').hidden = !aan;
     if (!aan) document.querySelectorAll('.paneel').forEach((p) => (p.hidden = true));
