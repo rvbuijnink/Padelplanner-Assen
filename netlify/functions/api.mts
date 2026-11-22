@@ -12,7 +12,7 @@
 // GET  /api/antwoord?t=...   -> gegevens van een uitnodiging uit de e-mail (geen inlog nodig, de sleutel is genoeg)
 // POST /api/antwoord         { t, a: "ja" | "nee" } -> uitnodiging beantwoorden
 // GET  /api/agenda?t=...     -> agenda-afspraak (.ics) van een partij, via de sleutel uit de e-mail
-import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { getUser, verifyRequestOrigin, AuthError, admin } from "@netlify/identity";
 import { db } from "../../db/index.js";
 import { beantwoord, markeerGeboekt, meldBetaallink, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, type Keuze } from "../../lib/automatisch.js";
@@ -353,25 +353,14 @@ async function slaProfielOp(user: Gebruiker, b: any) {
     bijgewerkt: new Date(),
   };
   const mij = await mijnSpeler(user);
-  const [zelfdeNaam] = await db.select().from(spelers).where(eq(spelers.slug, key));
-  if (zelfdeNaam && zelfdeNaam.id !== mij?.id && zelfdeNaam.userId)
+  // Elke naam hoort bij precies één account. Spelers worden niet meer op naam aan een account gekoppeld,
+  // zodat niemand de plek van een andere speler kan overnemen door diens naam te kiezen.
+  const [zelfdeNaam] = await db.select({ id: spelers.id }).from(spelers).where(eq(spelers.slug, key));
+  if (zelfdeNaam && zelfdeNaam.id !== mij?.id)
     return fout("Deze naam is al in gebruik door een andere speler. Kies een andere naam (bijv. met je achternaam erbij).", 409);
 
-  if (mij) {
-    // Bestaande speler: naam en instellingen bijwerken.
-    if (zelfdeNaam && zelfdeNaam.id !== mij.id) return fout("Er bestaat al een speler met deze naam.", 409);
-    await db.update(spelers).set({ slug: key, ...waarden }).where(eq(spelers.id, mij.id));
-  } else if (zelfdeNaam) {
-    // Speler van vóór het inloggen met dezelfde naam: aan dit account koppelen.
-    const bijgewerkt = await db
-      .update(spelers)
-      .set({ userId: user.id, ...waarden })
-      .where(and(eq(spelers.id, zelfdeNaam.id), isNull(spelers.userId)))
-      .returning({ id: spelers.id });
-    if (!bijgewerkt.length) return fout("Deze naam is al in gebruik door een andere speler.", 409);
-  } else {
-    await db.insert(spelers).values({ slug: key, userId: user.id, ...waarden });
-  }
+  if (mij) await db.update(spelers).set({ slug: key, ...waarden }).where(eq(spelers.id, mij.id));
+  else await db.insert(spelers).values({ slug: key, userId: user.id, ...waarden });
   const nu = await mijnSpeler(user);
   if (nu) await slaTelefoonOp(nu.id, telefoon);
   return json({ ok: true });
