@@ -3,8 +3,6 @@
 // GET /api/spelers           -> alle spelers met vaste instellingen en beschikbaarheid per week (ingelogd)
 // PUT /api/profiel           -> je eigen vaste instellingen opslaan (ingelogd)
 // PUT /api/beschikbaarheid   -> je eigen beschikbaarheid voor één week opslaan (ingelogd)
-// GET /api/clubs             -> door de beheerder ingevulde clubgegevens (prijzen, boekingshorizon)
-// PUT /api/clubs             -> clubgegevens van één club opslaan (beheercode nodig als BEHEER_CODE is ingesteld)
 // GET /api/overzicht         -> wie heeft welke week ingevuld (alleen beheerder, beheercode nodig)
 // GET /api/partijen          -> komende geplande partijen: je eigen partijen, of alle partijen voor de beheerder (ingelogd)
 // POST /api/partijen/aanmelden | /afmelden | /verwijderen | /geboekt | /nietgeboekt  { id } (ingelogd)
@@ -22,7 +20,7 @@ import { leesTelefoon, slaTelefoonOp, zichtbareTelefoons, waLink, toonNummer } f
 // @ts-ignore - gedeelde planner-logica (CommonJS)
 import Planner from "../../src/planner.cjs";
 const P: any = Planner;
-import { spelers, beschikbaarheid, clubGegevens, partijen, partijDeelnemers } from "../../db/schema.js";
+import { spelers, beschikbaarheid, partijen, partijDeelnemers } from "../../db/schema.js";
 
 // Met welk niveau je wilt spelen: één range van-tot, opgeslagen als ["8.0-9.2"].
 function leesWens(x: unknown): string[] | null {
@@ -335,10 +333,9 @@ async function slaProfielOp(user: Gebruiker, b: any) {
     clubVoorkeur[c] = v;
   }
   if (CLUBS.every((c) => clubVoorkeur[c] === "niet")) return fout("Zet minstens één club op ja.");
-  // 06-nummer: verplicht om een partij te bevestigen; leeg laten = verwijderen.
-  const metTelefoon = "telefoon" in b;
-  const telefoon = metTelefoon ? leesTelefoon(b.telefoon) : null;
-  if (telefoon === undefined) return fout("Vul een geldig 06-nummer in (bijv. 06-12345678), of laat het veld leeg.");
+  // 06-nummer: verplicht. Zonder nummer kan een speler niet bevestigen en zou een partij vastlopen.
+  const telefoon = leesTelefoon(b.telefoon);
+  if (!telefoon) return fout("Vul je 06-nummer in (bijv. 06-12345678). Dat is verplicht: zonder nummer kun je niet worden ingepland.");
 
   const waarden = {
     naam,
@@ -375,10 +372,8 @@ async function slaProfielOp(user: Gebruiker, b: any) {
   } else {
     await db.insert(spelers).values({ slug: key, userId: user.id, ...waarden });
   }
-  if (metTelefoon) {
-    const nu = await mijnSpeler(user);
-    if (nu) await slaTelefoonOp(nu.id, telefoon);
-  }
+  const nu = await mijnSpeler(user);
+  if (nu) await slaTelefoonOp(nu.id, telefoon);
   return json({ ok: true });
 }
 
@@ -427,43 +422,6 @@ async function slaBeschikbaarheidOp(user: Gebruiker, b: any) {
       target: [beschikbaarheid.spelerId, beschikbaarheid.week],
       set: { tijdvakken, bijgewerkt: new Date() },
     });
-  return json({ ok: true });
-}
-
-async function alleClubGegevens() {
-  const rijen = await db.select().from(clubGegevens);
-  const out: Record<string, unknown> = {};
-  for (const r of rijen) out[r.clubId] = { ...r, bijgewerkt: r.bijgewerkt.toISOString() };
-  return out;
-}
-
-function bedrag(v: unknown): number | null | undefined {
-  if (v === null || v === undefined || v === "") return null;
-  const n = typeof v === "number" ? v : Number(String(v).replace(",", "."));
-  if (!Number.isFinite(n) || n < 0 || n > 500) return undefined;
-  return Math.round(n * 100) / 100;
-}
-
-async function slaClubOp(req: Request, b: any) {
-  const beheer = Netlify.env.get("BEHEER_CODE");
-  if (beheer && req.headers.get("x-beheercode") !== beheer) return fout("Beheercode klopt niet.", 401);
-  if (!CLUBS.includes(b.clubId)) return fout("Onbekende club.");
-  const prijzen = { prijs60: bedrag(b.prijs60), prijs90: bedrag(b.prijs90), dalPrijs60: bedrag(b.dalPrijs60), dalPrijs90: bedrag(b.dalPrijs90) };
-  if (Object.values(prijzen).some((v) => v === undefined)) return fout("Vul prijzen in als bedrag in euro's (bijv. 32,50).");
-  const horizon = Number(b.horizonDagen);
-  if (!Number.isInteger(horizon) || horizon < 1 || horizon > 120) return fout("Boekingshorizon moet tussen 1 en 120 dagen liggen.");
-  const opentOm = typeof b.opentOm === "string" && b.opentOm.trim() ? b.opentOm.trim() : null;
-  if (opentOm && !/^([01]\d|2[0-3]):[0-5]\d$/.test(opentOm)) return fout("Tijdstip moet als UU:MM (bijv. 07:00).");
-  const opmerking = typeof b.opmerking === "string" ? b.opmerking.trim().slice(0, 300) : "";
-  const waarden = {
-    ...(prijzen as Record<string, number | null>),
-    horizonDagen: horizon,
-    horizonBevestigd: !!b.horizonBevestigd,
-    opentOm,
-    opmerking,
-    bijgewerkt: new Date(),
-  };
-  await db.insert(clubGegevens).values({ clubId: b.clubId, ...waarden }).onConflictDoUpdate({ target: clubGegevens.clubId, set: waarden });
   return json({ ok: true });
 }
 
@@ -523,8 +481,6 @@ export default async (req: Request) => {
 
   const pad = new URL(req.url).pathname.replace(/\/+$/, "");
   try {
-    if (pad === "/api/clubs" && req.method === "GET") return json({ clubs: await alleClubGegevens() });
-    if (pad === "/api/clubs" && (req.method === "PUT" || req.method === "POST")) return await slaClubOp(req, await leesBody(req));
     if (pad === "/api/overzicht" && req.method === "GET") return await overzicht(req);
     if (pad === "/api/antwoord" && (req.method === "GET" || req.method === "POST")) return await antwoord(req);
     if (pad === "/api/agenda" && req.method === "GET") return await agenda(req);
@@ -558,4 +514,4 @@ export default async (req: Request) => {
   }
 };
 
-export const config = { path: ["/api/spelers", "/api/profiel", "/api/beschikbaarheid", "/api/clubs", "/api/overzicht", "/api/partijen", "/api/partijen/*", "/api/antwoord", "/api/agenda", "/api/standaardweek", "/api/account"] };
+export const config = { path: ["/api/spelers", "/api/profiel", "/api/beschikbaarheid", "/api/overzicht", "/api/partijen", "/api/partijen/*", "/api/antwoord", "/api/agenda", "/api/standaardweek", "/api/account"] };

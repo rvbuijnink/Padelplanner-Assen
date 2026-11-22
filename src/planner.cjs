@@ -74,8 +74,9 @@
   const VENSTER_DAGEN = 14;
   // Beschikbaarheid vul je per week in, voor de hele periode waarin je bij een club al een baan kunt reserveren.
   const WEKEN_ZICHTBAAR = 5;
-  // Als er geen boekingshorizon bekend is, wordt een maand aangehouden. Nooit verder dan dit vooruit plannen.
-  const HORIZON_STANDAARD = 28;
+  // Hoe ver vooruit er gepland wordt: de langste termijn waarop een club banen openzet (Peakz, ongeveer een maand).
+  // Of een dag bij een club al open is en wat een baan kost, komt live uit het boekingssysteem van de club.
+  const HORIZON_STANDAARD = 31;
   const HORIZON_MAX = 6 * 7;
   const FREQUENTIES = [
     { id: 'wanneer-het-lukt', label: 'Wanneer het lukt' },
@@ -301,6 +302,30 @@
     });
   }
 
+  // Clubs zonder vaste prijzen of boekingstermijn: vrije banen, prijzen en hoe ver vooruit je kunt boeken komen live van de club.
+  function liveClubs(basis) {
+    return basis.map((c) => Object.assign({}, c, {
+      prijs60: null, prijs90: null, dalPrijs60: null, dalPrijs90: null,
+      horizonDagen: null, horizonBevestigd: false, opentOm: null, prijsBron: 'live', opmerking: ''
+    }));
+  }
+
+  // Link waarmee je meteen op de goede plek bij de club uitkomt.
+  // RacketIQ (Valley, Rolde) vult datum, tijd en speelduur in; Meet & Play (Plaza, De Hertenkamp) de datum; Peakz opent de boekingspagina.
+  function boekLink(club, datumKey, tijd, duur) {
+    if (!club) return null;
+    const basis = club.boeken;
+    if (!datumKey) return basis;
+    if (club.linkSoort === 'racketiq') {
+      return basis + '?date=' + datumKey + (tijd ? '&time=' + tijd : '') + (duur ? '&duration=' + duur : '');
+    }
+    if (club.linkSoort === 'meetandplay') {
+      const [j, m, d] = datumKey.split('-');
+      return basis + '?date=' + d + '-' + m + '-' + j;
+    }
+    return basis;
+  }
+
   // Of de hele groep bij deze club wil spelen (op die datum, als die is meegegeven).
   function clubOk(groep, club, datumKey) {
     return groep.every((p) => voorkeurVan(p, club.id, datumKey) !== 'niet');
@@ -326,7 +351,9 @@
           if (duren.length) beschikbaar.push(Object.assign({}, r, { duren, rest }));
         }
         if (beschikbaar.length < 4) { vorige = null; continue; }
-        const groepen = groepenVanVier(beschikbaar, clubs, d);
+        // Spelers met kanBoeken === false (niet bereid of geen 06-nummer) kunnen de baan niet boeken:
+        // een groepje moet minstens één speler hebben die dat wel kan.
+        const groepen = groepenVanVier(beschikbaar, clubs, d).filter((g) => g.spelers.some((p) => p.kanBoeken !== false));
         if (!groepen.length) { vorige = null; continue; }
         const namen = new Set();
         groepen.forEach((g) => g.spelers.forEach((p) => namen.add(p.naam)));
@@ -388,6 +415,6 @@
     naarMin, naarTijd, leesTijd, tijdId, tijdLabel, tijdenVan, normaliseer, vrijVanaf, WEKEN_ZICHTBAAR, HORIZON_STANDAARD, HORIZON_MAX, VOORKEUREN, FREQUENTIES,
     dagKey, parseKey, dagenTussen, volgendeDagen,
     maandagVan, weken, dagenVanWeek, boekingsHorizon, wekenBinnenHorizon, weekStatus, standaardVoorWeek, vulStandaardweek, beschikbaarVan, voorkeurVan, isLenteZomer, clubOk,
-    compatibel, groepenVanVier, status, prijs, isDal, voegClubsSamen, plan
+    compatibel, groepenVanVier, status, prijs, isDal, voegClubsSamen, liveClubs, boekLink, plan
   };
 });

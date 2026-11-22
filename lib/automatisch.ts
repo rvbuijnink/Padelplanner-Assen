@@ -14,7 +14,7 @@
 import { randomBytes } from "node:crypto";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { spelers, beschikbaarheid, clubGegevens, partijen, partijDeelnemers } from "../db/schema.js";
+import { spelers, beschikbaarheid, partijen, partijDeelnemers } from "../db/schema.js";
 import { verstuur, verstuurWachtrij, nlMinuten, STIL_VAN, STIL_TOT, type Mail } from "./mail.js";
 import { idsMetTelefoon } from "./telefoon.js";
 // @ts-ignore - gedeelde planner-logica (CommonJS), ook gebruikt in de browser
@@ -28,8 +28,8 @@ const UUR = 3600000;
 const DAG = 86400000;
 // Hoeveel partijen er per run hooguit automatisch worden aangemaakt.
 const MAX_NIEUW_PER_RUN = 4;
-// Partijen worden minstens een week vooruit gepland, en zo ver vooruit als de club met de langste boekingshorizon toelaat
-// (Beheer clubs; populaire avonden zijn snel vol). Clubs die een dag nog niet openzetten slaat de live controle vanzelf over.
+// Partijen worden minstens een week vooruit gepland, tot 31 dagen vooruit (de langste termijn van een club, Peakz;
+// populaire avonden zijn snel vol). Clubs die een dag nog niet openzetten slaat de live controle vanzelf over.
 export const MIN_DAGEN_VOORUIT = 7;
 // Zoeken gebeurt in de runs van 08:00 tot en met 17:00 (Nederlandse tijd), zodat de boeker zijn 4 uur nog dezelfde dag heeft.
 const ZOEK_VAN = 8;
@@ -126,18 +126,15 @@ const isOpgelost = (p: Partij) => isCompleet(p) || (p.besluit === "drie" && beve
 async function laad(): Promise<Context> {
   const vandaag = nlVandaag();
   const vanaf = plusDagen(vandaag, -14);
-  const [sp, best, gegevens, lijst, metTelefoon, laatst] = await Promise.all([
+  const [sp, best, lijst, metTelefoon, laatst] = await Promise.all([
     db.select().from(spelers),
     db.select().from(beschikbaarheid).where(gte(beschikbaarheid.week, plusDagen(vandaag, -7))),
-    db.select().from(clubGegevens),
     db.select().from(partijen).where(gte(partijen.datum, vanaf)),
     idsMetTelefoon(),
     db.select({ clubId: partijen.clubId, datum: sql<string>`max(${partijen.datum})` }).from(partijen).where(eq(partijen.geannuleerd, false)).groupBy(partijen.clubId),
   ]);
   const ids = lijst.map((p) => p.id);
   const rijen = ids.length ? await db.select().from(partijDeelnemers).where(inArray(partijDeelnemers.partijId, ids)) : [];
-  const g: Record<string, unknown> = {};
-  for (const r of gegevens) g[r.clubId] = r;
   const laatstePerClub: Record<string, string> = {};
   for (const r of laatst) laatstePerClub[r.clubId] = String(r.datum).slice(0, 10);
   return {
@@ -148,7 +145,8 @@ async function laad(): Promise<Context> {
       return { ...s, weken: P.vulStandaardweek(weken, s.standaardWeek, komendeWeken(vandaag)) };
     }),
     partijen: lijst.map((p) => ({ ...p, rijen: rijen.filter((r) => r.partijId === p.id) })),
-    clubs: P.voegClubsSamen((clubsJson as any).clubs, g),
+    // Geen vaste prijzen of boekingstermijnen: vrije banen en prijzen komen live van de clubs.
+    clubs: P.liveClubs((clubsJson as any).clubs),
     metTelefoon,
     laatstePerClub,
   };
@@ -277,11 +275,9 @@ const antwoordLinks = (token: string) => [
 ];
 const namenVan = (ctx: Context, rijen: Deelnemer[]) => rijen.map((r) => spelerVan(ctx, r.spelerId)?.naam).filter(Boolean) as string[];
 
-// Baanprijs: zoals gevonden bij het plannen, anders de bekende prijs van de club.
-function baanPrijs(ctx: Context, p: Partij) {
-  if (p.baanPrijs != null) return p.baanPrijs;
-  const pr = P.prijs(clubVan(ctx, p.clubId), p.duur, p.datum, P.tijdId(naarMin(p.tijd), naarMin(p.tijd) + p.duur));
-  return pr ? pr.perBaan : null;
+// Baanprijs: de live prijs die bij het plannen bij de club is gevonden.
+function baanPrijs(_ctx: Context, p: Partij) {
+  return p.baanPrijs ?? null;
 }
 export function bedragPP(ctx: Context, p: Partij, aantal = MAX_SPELERS) {
   const b = baanPrijs(ctx, p);
@@ -304,11 +300,12 @@ function boekerMail(ctx: Context, p: Partij, s: Speler): Mail | null {
     tekst:
       `Hoi ${s.naam},\n\nEr is een partij voor je gevonden en jij bent gevraagd om de baan te boeken.\n\n` +
       `Wanneer: ${partijTekst(ctx, p)}\nMet: ${anderen.length ? naamLijst(anderen) : "nog onbekend"}\nBedrag: ${bedragTekst(ctx, p)}\n\n` +
+      `${club.linkSoort === "racketiq" ? `De knop hieronder opent ${club.naam} met de datum, ${p.tijd} en de speelduur al ingevuld.` : club.linkSoort === "meetandplay" ? `De knop hieronder opent ${club.naam} op de juiste dag; kies daar ${p.tijd} en ${p.duur} minuten.` : `De knop hieronder opent de boekingspagina van ${club.naam}; kies daar ${dagTekst(p.datum)}, ${p.tijd} en ${p.duur} minuten.`}\n\n` +
       `Boek de baan vóór ${momentTekst(p.boekenTot ? new Date(p.boekenTot).getTime() : Date.now() + BOEK_UREN * UUR)}. ` +
       `Daarna maak je een Tikkie voor het bedrag per persoon en vul je de link in op de partijpagina, bij "Baan is geboekt". ` +
       `Pas dan krijgen de andere drie hun uitnodiging. Boek je niet op tijd, dan vragen we de volgende speler die wil boeken.\n\n` +
       `Gratis annuleren kan bij ${club.naam} tot 48 uur voor aanvang${club.annuleren ? ` (${club.annuleren})` : ""}.`,
-    knoppen: [{ label: `Boek bij ${club.naam}`, url: club.boeken }, naarPartij(p.id)],
+    knoppen: [{ label: `Boek bij ${club.naam}`, url: P.boekLink(club, p.datum, p.tijd, p.duur) }, naarPartij(p.id)],
   };
 }
 
@@ -442,7 +439,7 @@ async function werkBij(ctx: Context, p: Partij, mails: Mail[], laatste?: number)
     const groep = spelendVan(p).map((r) => spelerVan(ctx, r.spelerId)).filter(Boolean) as Speler[];
     const nieuw: Speler[] = [];
     const kandidaten = ctx.spelers
-      .filter((s) => !p.rijen.some((r) => r.spelerId === s.id))
+      .filter((s) => ctx.metTelefoon.has(s.id) && !p.rijen.some((r) => r.spelerId === s.id))
       .sort((a, b) => aantalPartijen(ctx, a) - aantalPartijen(ctx, b) || a.id - b.id);
     for (const s of kandidaten) {
       if (groep.length + nieuw.length >= MAX_SPELERS) break;
@@ -684,7 +681,7 @@ export async function kandidatenVoor(partijId: number) {
   const p = ctx.partijen.find((x) => x.id === partijId);
   if (!p) return [];
   return ctx.spelers
-    .filter((s) => clubJa(s, p.clubId, p.datum) && !p.rijen.some((r) => r.spelerId === s.id && (isActief(r) || nietOpDag(r))) && !speeltAlOpDag(ctx, s.id, p.datum, p.id))
+    .filter((s) => ctx.metTelefoon.has(s.id) && clubJa(s, p.clubId, p.datum) && !p.rijen.some((r) => r.spelerId === s.id && (isActief(r) || nietOpDag(r))) && !speeltAlOpDag(ctx, s.id, p.datum, p.id))
     .map((s) => ({ id: s.id, naam: s.naam }))
     .sort((a, b) => a.naam.localeCompare(b.naam));
 }
@@ -768,7 +765,9 @@ async function zoekNieuwePartijen(ctx: Context, mails: Mail[]) {
   const geprobeerd = new Set<string>();
   const genoegGezocht = () => checks >= MAX_BAAN_CHECKS || Date.now() - begin > MAX_ZOEKTIJD;
   while (gemaakt < MAX_NIEUW_PER_RUN && !genoegGezocht()) {
-    const pool = ctx.spelers.filter((s) => dagen.some((d) => heeftRuimte(ctx, s, d))).map((s) => zonderAfgezegdeDagen(ctx, s, dagen));
+    // Alleen spelers met een 06-nummer (anders kunnen ze niet bevestigen en loopt de partij vast).
+    const pool = ctx.spelers.filter((s) => ctx.metTelefoon.has(s.id) && dagen.some((d) => heeftRuimte(ctx, s, d)))
+      .map((s) => ({ ...zonderAfgezegdeDagen(ctx, s, dagen), kanBoeken: kanBoeken(ctx, s) }));
     if (pool.length < MAX_SPELERS) break;
     const kandidaten = volgorde(P.plan(pool, ctx.clubs, vandaagDatum, KANDIDATEN, dagen), ronde);
     let gekozen: { k: any; groep: Speler[]; duur: number; clubId: string; tijd: string; prijs: number } | null = null;
