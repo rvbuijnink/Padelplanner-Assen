@@ -636,7 +636,7 @@
   function toonWeken() {
     const r = ik();
     if (!actieveWeek || !weken.includes(actieveWeek)) actieveWeek = standaardWeek();
-    $('weken-uitleg').textContent = 'Vul je beschikbaarheid in voor alle weken waarin je al een baan kunt reserveren. De club die het verst vooruit boekt, opent banen ' + horizonDagen + ' dagen van tevoren (t/m ' + dagLabel(planDagen[planDagen.length - 1]) + '). Zo kan de planner een partij maken zodra er vier spelers kunnen en een baan vrij is. Je kunt het altijd nog aanpassen.';
+    $('weken-uitleg').textContent = 'Vul je beschikbaarheid in voor alle weken waarin je al een baan kunt reserveren. De planner kijkt tot ' + horizonDagen + ' dagen vooruit (t/m ' + dagLabel(planDagen[planDagen.length - 1]) + '); of een club die dag al open is, ziet hij live bij de club. Zo kan de planner een partij maken zodra er vier spelers kunnen en een baan vrij is. Je kunt het altijd nog aanpassen.';
     $('weken').replaceChildren(...weken.map((w, i) => {
       const st = statusVan(r, w);
       const titel = i === 0 ? 'Deze week' : i === 1 ? 'Volgende week' : 'Over ' + i + ' weken';
@@ -877,12 +877,8 @@
       basisClubs = data.clubs;
       if (data.padelchecker) padelcheckerUrl = data.padelchecker;
     }
-    let gegevens = {};
-    try {
-      const r = await fetch('/api/clubs', { headers: headers() });
-      if (r.ok) gegevens = (await r.json()).clubs || {};
-    } catch (e) {}
-    clubs = P.voegClubsSamen(basisClubs, gegevens);
+    // Prijzen, vrije banen en hoe ver vooruit je kunt boeken komen live van de clubs.
+    clubs = P.liveClubs(basisClubs);
   }
   async function laadSpelers() {
     try {
@@ -1001,7 +997,7 @@
           blokken.push(h('div', { class: 'betaalvak' },
             h('div', {}, h('strong', {}, p.boekerIkke ? 'Jij boekt de baan' : p.boeker + ' boekt de baan'), p.boekenTot ? ' vóór ' : '', p.boekenTot ? h('span', { class: 'klok' }, klok(p.boekenTot)) : null, '. Bedrag: ' + bedragTekst + '.'),
             h('div', { class: 'hint' }, 'Boek de baan, maak een Tikkie voor het bedrag per persoon en plak de link hier. Na "Baan is geboekt" krijgen de anderen hun uitnodiging.'),
-            h('div', { class: 'boekrij' }, club ? h('a', { class: 'knop', href: club.boeken, target: '_blank', rel: 'noopener' }, 'Boek bij ' + club.naam + ' ↗') : null),
+            h('div', { class: 'boekrij' }, club ? h('a', { class: 'knop', href: P.boekLink(club, p.datum, p.tijd, p.duur), target: '_blank', rel: 'noopener' }, 'Boek bij ' + club.naam + ' ↗') : null),
             h('div', { class: 'boekrij' }, tikkie, knop('Baan is geboekt', '', () => doe('/geboekt', { link: tikkie.value }))),
             p.boekerIkke ? h('div', { class: 'boekrij' }, knop('Ik kan niet boeken', 'link', () => { if (confirm('Dan vraagt de site de volgende speler die wil boeken. Je blijft gewoon meespelen.')) doe('/keuze', { keuze: 'nietboeken' }); })) : null));
         } else if (p.doeIkMee) {
