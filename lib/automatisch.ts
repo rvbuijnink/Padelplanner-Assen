@@ -184,10 +184,10 @@ function heeftRuimte(ctx: Context, s: Speler, datum: string, behalve?: number) {
 // Vervangers (en alle spelers) moeten de gekozen club op "ja" hebben staan.
 const clubJa = (s: Speler, clubId: string, datum: string) => P.voorkeurVan(s, clubId, datum) !== "niet";
 
-function pastBij(ctx: Context, s: Speler, p: { id?: number; datum: string; tijd: string; duur: number; clubId: string }, groep: Speler[]) {
+function pastBij(ctx: Context, s: Speler, p: { id?: number; datum: string; tijd: string; duur: number; clubId: string }, groep: Speler[], niv: (a: Speler, b: Speler) => boolean = nivPast) {
   if (!clubJa(s, p.clubId, p.datum)) return false;
   if (!kanOp(s, p.datum, p.tijd, p.duur)) return false;
-  if (!groep.every((g) => nivPast(s, g))) return false;
+  if (!groep.every((g) => niv(s, g))) return false;
   if (!heeftRuimte(ctx, s, p.datum, p.id)) return false;
   if (speeltAlOpDag(ctx, s.id, p.datum, p.id)) return false;
   if (teDichtBij(ctx, s, p.datum, p.id)) return false;
@@ -814,16 +814,28 @@ async function zoekNieuwePartijen(ctx: Context, mails: Mail[]) {
 // De vierde speler (wie kijkt) kan meedoen en boekt dan zelf de baan. Zijn eigen beschikbaarheid is niet nodig: hij kiest zelf.
 const MAX_DRIETAL_CHECKS = 10;
 const MAX_DRIETALLEN = 6;
-export type OpenPartij = { datum: string; tijd: string; duur: number; clubId: string; club: string; prijs: number; perPersoon: number; spelers: { id: number; naam: string }[] };
+export type OpenPartij = { datum: string; tijd: string; duur: number; clubId: string; club: string; prijs: number; perPersoon: number; spelers: { id: number; naam: string; niveau: string; pastPrecies: boolean }[] };
 
 function magOpDag(ctx: Context, s: Speler, datum: string) {
   return !speeltAlOpDag(ctx, s.id, datum) && !teDichtBij(ctx, s, datum) && !kanNietOpDag(ctx, s.id, datum);
 }
 
+// Bij "speel mee" mag de speelsterkte iets afwijken van wat iemand heeft ingesteld: wie kijkt ziet zelf wie er
+// meedoen (met hun speelsterkte) en kiest of hij aansluit. De gewone automatische planning blijft strikt.
+const NIVEAU_MARGE = 0.5;
+function wilOngeveer(wens: string[], niveau: string) {
+  const b = P.wensBereik(wens);
+  const g = P.niveauGetal(niveau);
+  if (!b || !Number.isFinite(g)) return P.wilMet(wens, niveau);
+  return g >= b[0] - NIVEAU_MARGE - 1e-9 && g <= b[1] + NIVEAU_MARGE + 1e-9;
+}
+const nivBijna = (a: Speler, b: Speler) => wilOngeveer(a.wensNiveaus, b.niveau) && wilOngeveer(b.wensNiveaus, a.niveau);
+const voornaam = (naam: string) => naam.trim().split(/\s+/)[0] || naam;
+
 function drietallenVoor(ctx: Context, ik: Speler) {
   const max = P.boekingsHorizon(ctx.clubs);
   const uit: { datum: string; van: number; tot: number; duren: string[]; groep: Speler[]; clubs: any[] }[] = [];
-  const anderen = ctx.spelers.filter((s) => s.id !== ik.id && ctx.metTelefoon.has(s.id) && nivPast(ik, s) && s.duren.some((x) => ik.duren.includes(x)));
+  const anderen = ctx.spelers.filter((s) => s.id !== ik.id && ctx.metTelefoon.has(s.id) && nivBijna(ik, s) && s.duren.some((x) => ik.duren.includes(x)));
   for (let i = MIN_DAGEN_VOORUIT; i <= max; i++) {
     const d = plusDagen(ctx.vandaag, i);
     if (!magOpDag(ctx, ik, d)) continue;
@@ -841,10 +853,10 @@ function drietallenVoor(ctx: Context, ik: Speler) {
         .filter((x) => x.duren.length);
       for (let a = 0; a < nu.length; a++)
         for (let b = a + 1; b < nu.length; b++) {
-          if (!nivPast(nu[a].s, nu[b].s)) continue;
+          if (!nivBijna(nu[a].s, nu[b].s)) continue;
           for (let c = b + 1; c < nu.length; c++) {
             const g = [nu[a], nu[b], nu[c]];
-            if (!nivPast(g[0].s, g[2].s) || !nivPast(g[1].s, g[2].s)) continue;
+            if (!nivBijna(g[0].s, g[2].s) || !nivBijna(g[1].s, g[2].s)) continue;
             const duren = ik.duren.filter((du) => g.every((x) => x.duren.includes(du)));
             if (!duren.length) continue;
             const clubs = clubsDag.filter((cl) => g.every((x) => clubJa(x.s, cl.id, d)));
@@ -891,7 +903,8 @@ export async function openPartijenVoor(spelerId: number): Promise<{ partijen: Op
     partijen.push({
       datum: g.k.datum, tijd: g.live.tijd, duur: g.duur, clubId: g.live.clubId, club: clubVan(ctx, g.live.clubId).naam,
       prijs: g.live.prijs, perPersoon: g.live.prijs / MAX_SPELERS,
-      spelers: g.k.groep.map((s) => ({ id: s.id, naam: s.naam })),
+      // Alleen voornaam en speelsterkte; pastPrecies = valt binnen ieders ingestelde niveau-range (zonder marge).
+      spelers: g.k.groep.map((s) => ({ id: s.id, naam: voornaam(s.naam), niveau: s.niveau, pastPrecies: nivPast(ik, s) && g.k.groep.every((x) => x.id === s.id || nivPast(x, s)) })),
     });
   }
   return { partijen };
@@ -920,7 +933,7 @@ export async function speelMeeEnBoek(spelerId: number, b: any): Promise<Antwoord
   if (!ik.duren.includes(String(duur))) return { ok: false, fout: "Deze speelduur staat niet bij je vaste instellingen.", status: 409 };
   if (!magOpDag(ctx, ik, datum)) return { ok: false, fout: "Je staat die dag (of te kort ervoor of erna) al bij een andere partij.", status: 409 };
   const voorstel = { datum, tijd, duur, clubId };
-  if (!drie.every((s) => nivPast(ik, s) && pastBij(ctx, s, voorstel, [ik, ...drie.filter((x) => x.id !== s.id)])))
+  if (!drie.every((s) => nivBijna(ik, s) && pastBij(ctx, s, voorstel, [ik, ...drie.filter((x) => x.id !== s.id)], nivBijna)))
     return { ok: false, fout: "Deze partij is er niet meer: een van de spelers kan inmiddels niet meer. Vernieuw de pagina.", status: 409 };
   // Nog eens live controleren of de baan echt vrij is (en tegen welke prijs).
   const live = await liveKeuze(ctx, datum, { id: P.tijdId(naarMin(tijd), naarMin(tijd) + duur), tot: naarTijd(naarMin(tijd) + duur) }, duur, [{ club: clubVan(ctx, clubId) }]);
