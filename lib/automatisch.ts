@@ -808,6 +808,138 @@ async function zoekNieuwePartijen(ctx: Context, mails: Mail[]) {
   return gemaakt;
 }
 
+// ---- Partijen met een vrije baan waar nog één speler ontbreekt ----
+// Live berekend zodra een speler de site opent (niet pas bij de volgende ronde van het automatisch plannen):
+// drie passende spelers kunnen op hetzelfde moment en er is live een baan vrij bij een club die alle vier op "ja" hebben.
+// De vierde speler (wie kijkt) kan meedoen en boekt dan zelf de baan. Zijn eigen beschikbaarheid is niet nodig: hij kiest zelf.
+const MAX_DRIETAL_CHECKS = 10;
+const MAX_DRIETALLEN = 6;
+export type OpenPartij = { datum: string; tijd: string; duur: number; clubId: string; club: string; prijs: number; perPersoon: number; spelers: { id: number; naam: string }[] };
+
+function magOpDag(ctx: Context, s: Speler, datum: string) {
+  return !speeltAlOpDag(ctx, s.id, datum) && !teDichtBij(ctx, s, datum) && !kanNietOpDag(ctx, s.id, datum);
+}
+
+function drietallenVoor(ctx: Context, ik: Speler) {
+  const max = P.boekingsHorizon(ctx.clubs);
+  const uit: { datum: string; van: number; tot: number; duren: string[]; groep: Speler[]; clubs: any[] }[] = [];
+  const anderen = ctx.spelers.filter((s) => s.id !== ik.id && ctx.metTelefoon.has(s.id) && nivPast(ik, s) && s.duren.some((x) => ik.duren.includes(x)));
+  for (let i = MIN_DAGEN_VOORUIT; i <= max; i++) {
+    const d = plusDagen(ctx.vandaag, i);
+    if (!magOpDag(ctx, ik, d)) continue;
+    const clubsDag = ctx.clubs.filter((c) => clubJa(ik, c.id, d));
+    if (!clubsDag.length) continue;
+    const kunnen = anderen
+      .filter((s) => heeftRuimte(ctx, s, d) && magOpDag(ctx, s, d))
+      .map((s) => ({ s, tijden: P.tijdenVan(P.beschikbaarVan(s)[d] || []) }))
+      .filter((x) => x.tijden.length);
+    if (kunnen.length < 3) continue;
+    const gezien = new Map<string, number>();
+    for (let t = P.DAG_VAN; t + 60 <= 1440; t += P.STAP) {
+      const nu = kunnen
+        .map((x) => { const rest = P.vrijVanaf(x.tijden, t); return { ...x, rest, duren: x.s.duren.filter((du) => ik.duren.includes(du) && Number(du) <= rest) }; })
+        .filter((x) => x.duren.length);
+      for (let a = 0; a < nu.length; a++)
+        for (let b = a + 1; b < nu.length; b++) {
+          if (!nivPast(nu[a].s, nu[b].s)) continue;
+          for (let c = b + 1; c < nu.length; c++) {
+            const g = [nu[a], nu[b], nu[c]];
+            if (!nivPast(g[0].s, g[2].s) || !nivPast(g[1].s, g[2].s)) continue;
+            const duren = ik.duren.filter((du) => g.every((x) => x.duren.includes(du)));
+            if (!duren.length) continue;
+            const clubs = clubsDag.filter((cl) => g.every((x) => clubJa(x.s, cl.id, d)));
+            if (!clubs.length) continue;
+            const sleutel = g.map((x) => x.s.id).sort((p, q) => p - q).join("|");
+            const tot = t + Math.min(...g.map((x) => x.rest));
+            // Zelfde drietal een half uur later binnen hetzelfde tijdvak: al gevonden.
+            if ((gezien.get(sleutel) ?? -1) >= tot) continue;
+            gezien.set(sleutel, tot);
+            uit.push({ datum: d, van: t, tot, duren, groep: g.map((x) => x.s), clubs });
+          }
+        }
+    }
+  }
+  uit.sort((a, b) => a.datum.localeCompare(b.datum) || a.van - b.van);
+  // Overlappende momenten op dezelfde dag maar één keer tonen.
+  const gekozen: typeof uit = [];
+  for (const k of uit) {
+    if (gekozen.some((g) => g.datum === k.datum && k.van < g.tot && g.van < k.tot)) continue;
+    gekozen.push(k);
+  }
+  return gekozen;
+}
+
+export async function openPartijenVoor(spelerId: number): Promise<{ partijen: OpenPartij[]; reden?: string }> {
+  const ctx = await laad();
+  const ik = spelerVan(ctx, spelerId);
+  if (!ik) return { partijen: [] };
+  if (!ctx.metTelefoon.has(ik.id)) return { partijen: [], reden: "Vul eerst je 06-nummer in bij Vaste instellingen; dat is nodig om mee te spelen en de baan te boeken." };
+  const kandidaten = drietallenVoor(ctx, ik).slice(0, MAX_DRIETAL_CHECKS);
+  const gevonden = await Promise.all(kandidaten.map(async (k) => {
+    const slot = { id: P.tijdId(k.van, k.tot), tot: naarTijd(k.tot) };
+    const opties = k.clubs.map((club) => ({ club }));
+    // Eerst de langste gezamenlijke speelduur, anders de kortere.
+    for (const duur of k.duren.map(Number).sort((a, b) => b - a)) {
+      const live = await liveKeuze(ctx, k.datum, slot, duur, opties);
+      if (live) return { k, duur, live };
+    }
+    return null;
+  }));
+  const partijen: OpenPartij[] = [];
+  for (const g of gevonden) {
+    if (!g || partijen.length >= MAX_DRIETALLEN) continue;
+    partijen.push({
+      datum: g.k.datum, tijd: g.live.tijd, duur: g.duur, clubId: g.live.clubId, club: clubVan(ctx, g.live.clubId).naam,
+      prijs: g.live.prijs, perPersoon: g.live.prijs / MAX_SPELERS,
+      spelers: g.k.groep.map((s) => ({ id: s.id, naam: s.naam })),
+    });
+  }
+  return { partijen };
+}
+
+// "Ik speel mee en boek de baan": de partij wordt meteen aangemaakt met deze speler als boeker.
+// Na "Baan is geboekt" krijgen de andere drie hun uitnodiging (zoals bij elke automatische partij).
+export async function speelMeeEnBoek(spelerId: number, b: any): Promise<Antwoord & { id?: number }> {
+  const ctx = await laad();
+  const ik = spelerVan(ctx, spelerId);
+  if (!ik) return { ok: false, fout: "Sla eerst je vaste instellingen op.", status: 404 };
+  if (!ctx.metTelefoon.has(ik.id)) return { ok: false, fout: "Vul eerst je 06-nummer in bij Vaste instellingen.", status: 409 };
+  const datum = typeof b?.datum === "string" && /^\d{4}-\d{2}-\d{2}$/.test(b.datum) ? b.datum : null;
+  const tijd = typeof b?.tijd === "string" && /^([01]\d|2[0-3]):(00|30)$/.test(b.tijd) ? b.tijd : null;
+  const duur = Number(b?.duur);
+  const clubId = typeof b?.clubId === "string" ? b.clubId : "";
+  const ids = Array.isArray(b?.spelers) ? [...new Set(b.spelers.map(Number))] as number[] : [];
+  if (!datum || !tijd || ![60, 90].includes(duur) || !ctx.clubs.some((c) => c.id === clubId) || ids.length !== 3 || ids.includes(ik.id))
+    return { ok: false, fout: "Onbekende partij." };
+  const dagen = (utc(datum) - utc(ctx.vandaag)) / DAG;
+  if (dagen < MIN_DAGEN_VOORUIT || dagen > P.boekingsHorizon(ctx.clubs)) return { ok: false, fout: "Dit moment valt buiten de periode waarin de site plant.", status: 409 };
+  const groep = ids.map((id) => spelerVan(ctx, id));
+  if (groep.some((s) => !s || !ctx.metTelefoon.has(s.id))) return { ok: false, fout: "Een van de spelers doet niet meer mee.", status: 409 };
+  const drie = groep as Speler[];
+  if (!clubJa(ik, clubId, datum)) return { ok: false, fout: `Je hebt ${clubVan(ctx, clubId).naam} op "nee" staan.`, status: 409 };
+  if (!ik.duren.includes(String(duur))) return { ok: false, fout: "Deze speelduur staat niet bij je vaste instellingen.", status: 409 };
+  if (!magOpDag(ctx, ik, datum)) return { ok: false, fout: "Je staat die dag (of te kort ervoor of erna) al bij een andere partij.", status: 409 };
+  const voorstel = { datum, tijd, duur, clubId };
+  if (!drie.every((s) => nivPast(ik, s) && pastBij(ctx, s, voorstel, [ik, ...drie.filter((x) => x.id !== s.id)])))
+    return { ok: false, fout: "Deze partij is er niet meer: een van de spelers kan inmiddels niet meer. Vernieuw de pagina.", status: 409 };
+  // Nog eens live controleren of de baan echt vrij is (en tegen welke prijs).
+  const live = await liveKeuze(ctx, datum, { id: P.tijdId(naarMin(tijd), naarMin(tijd) + duur), tot: naarTijd(naarMin(tijd) + duur) }, duur, [{ club: clubVan(ctx, clubId) }]);
+  if (!live || live.tijd !== tijd) return { ok: false, fout: "Deze baan is net niet meer vrij. Vernieuw de pagina voor andere momenten.", status: 409 };
+  const [nieuw] = await db.insert(partijen)
+    .values({ datum, tijd, duur, clubId, automatisch: true, opmerking: `${ik.naam} speelt mee en boekt de baan`, baanPrijs: live.prijs, boekerId: ik.id, boekenTot: new Date(deadline(Date.now(), BOEK_UREN, { datum, tijd })) })
+    .returning();
+  const p: Partij = { ...nieuw, rijen: [] };
+  ctx.partijen.push(p);
+  for (const s of [ik, ...drie]) await zetRij(p, s.id, "gepland");
+  const club = clubVan(ctx, clubId);
+  return {
+    ok: true, id: p.id,
+    tekst: `Top, je speelt mee! Boek de baan bij ${club.naam} vóór ${momentTekst(new Date(p.boekenTot!).getTime())} en druk daarna op "Baan is geboekt". ` +
+      `Dan krijgen ${naamLijst(drie.map((s) => s.naam))} hun uitnodiging.`,
+    boeken: { club: club.naam, url: P.boekLink(club, datum, tijd, duur) },
+  };
+}
+
 // ---- Elk uur ----
 export async function automatischPlannen(metZoeken?: boolean) {
   const wachtrij = await verstuurWachtrij();

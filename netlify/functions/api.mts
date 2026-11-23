@@ -12,10 +12,12 @@
 // GET  /api/antwoord?t=...   -> gegevens van een uitnodiging uit de e-mail (geen inlog nodig, de sleutel is genoeg)
 // POST /api/antwoord         { t, a: "ja" | "nee" } -> uitnodiging beantwoorden
 // GET  /api/agenda?t=...     -> agenda-afspraak (.ics) van een partij, via de sleutel uit de e-mail
+// GET  /api/partijen/open    -> momenten waarop drie passende spelers kunnen en live een baan vrij is (ingelogd)
+// POST /api/partijen/meedoen { datum, tijd, duur, clubId, spelers } -> "Ik speel mee en boek de baan"
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { getUser, verifyRequestOrigin, AuthError, admin } from "@netlify/identity";
 import { db } from "../../db/index.js";
-import { beantwoord, markeerGeboekt, meldBetaallink, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, type Keuze } from "../../lib/automatisch.js";
+import { beantwoord, markeerGeboekt, meldBetaallink, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, openPartijenVoor, speelMeeEnBoek, type Keuze } from "../../lib/automatisch.js";
 import { leesTelefoon, slaTelefoonOp, zichtbareTelefoons, waLink, toonNummer } from "../../lib/telefoon.js";
 // @ts-ignore - gedeelde planner-logica (CommonJS)
 import Planner from "../../src/planner.cjs";
@@ -492,6 +494,17 @@ export default async (req: Request) => {
     if (pad === "/api/beschikbaarheid" && schrijven) return await slaBeschikbaarheidOp(user, await leesBody(req));
     if (pad === "/api/standaardweek" && schrijven) return await slaStandaardweekOp(user, await leesBody(req));
     if (pad === "/api/partijen" && req.method === "GET") return (async () => { const beheer = isBeheer(req); return json({ partijen: await allePartijen(user, beheer), beheer }); })();
+    // Partijen met een vrije baan waar nog één speler ontbreekt (live berekend) en "Ik speel mee en boek de baan".
+    if (pad === "/api/partijen/open" && req.method === "GET") {
+      const mij = await mijnSpeler(user);
+      return json(mij ? await openPartijenVoor(mij.id) : { partijen: [] });
+    }
+    if (pad === "/api/partijen/meedoen" && req.method === "POST") {
+      const mij = await mijnSpeler(user);
+      if (!mij) return fout("Sla eerst je vaste instellingen op.", 404);
+      const r = await speelMeeEnBoek(mij.id, await leesBody(req));
+      return r.ok ? json({ ok: true, tekst: r.tekst, id: r.id, boeken: r.boeken }) : fout(r.fout, r.status);
+    }
     if (pad === "/api/account" && req.method === "DELETE") { verifyRequestOrigin(req); return await verwijderAccount(user); }
     const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|betaald|nietbetaald|keuze|voorstel|kandidaten)$/.exec(pad);
     if (m && req.method === "POST") return await wijzigPartij(user, m[1], await leesBody(req), isBeheer(req));
