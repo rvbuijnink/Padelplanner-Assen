@@ -442,7 +442,7 @@
       <div id="partijen"></div>
       <div id="open-blok" hidden>
         <h3 style="margin:18px 0 4px;font-size:1.05rem">Er mist nog één speler: speel mee en boek de baan</h3>
-        <p class="hint" style="margin-top:0">Op deze momenten kunnen drie spelers die bij jou passen, en er is nu een baan vrij. Doe je mee, dan boek jij de baan; daarna krijgen de andere drie hun uitnodiging.</p>
+        <p class="hint" style="margin-top:0">Op deze momenten kunnen drie spelers met ongeveer jouw speelsterkte (tot 0,5 buiten de ingestelde niveaus), en er is nu een baan vrij. Je ziet wie er meedoen en hun speelsterkte, zodat je zelf kiest of je aansluit. Doe je mee, dan boek jij de baan; daarna krijgen de andere drie hun uitnodiging.</p>
         <p class="melding" id="open-info" role="status"></p>
         <div id="open-partijen"></div>
       </div>
@@ -475,7 +475,7 @@
   <div class="paneel" id="paneel-beheer" hidden>
     <section>
       <h2>Beheercode</h2>
-      <p class="hint">Vul hier de beheercode in om <em>Beste momenten</em>, <em>Wie heeft ingevuld?</em> en bij <em>Geplande partijen</em> alle partijen te zien. De code wordt onthouden tot je dit tabblad of de browser sluit.</p>
+      <p class="hint">Vul hier de beheercode in om <em>Beste momenten</em>, <em>Beschikbaarheid en overeenkomsten</em>, <em>Wie heeft ingevuld?</em> en bij <em>Geplande partijen</em> alle partijen te zien. De code wordt onthouden tot je dit tabblad of de browser sluit.</p>
       <div class="rij"><div>
         <label for="beheercode"><strong>Beheercode</strong></label>
         <input type="password" id="beheercode" autocomplete="current-password">
@@ -488,6 +488,13 @@
       <button type="button" class="rustig" id="toon-beste">Toon beste momenten</button>
       <p class="hint" id="planner-info"></p>
       <div id="planner"></div>
+    </section>
+    <section>
+      <h2>Beschikbaarheid en overeenkomsten</h2>
+      <p class="hint">Alleen voor de beheerder. Per dag zie je wie wanneer kan (zelf ingevuld of via de standaardweek) en op welke tijden spelers elkaar overlappen. Vanaf vier spelers staat erbij of er een viertal tussen zit dat qua niveau, speelduur en club bij elkaar past.</p>
+      <button type="button" class="rustig" id="toon-beschikbaarheid">Toon beschikbaarheid</button>
+      <div class="melding" id="beschikbaarheid-melding" role="status"></div>
+      <div id="beschikbaarheid-alle"></div>
     </section>
     <section>
       <h2>Wie heeft ingevuld?</h2>
@@ -942,6 +949,55 @@
     toonOverzicht();
   }
   $('toon-overzicht').addEventListener('click', laadOverzicht);
+
+  // ---- Beheer: beschikbaarheid van iedereen en overeenkomsten ----
+  // Per dag: wie kan wanneer, en de tijden waarop twee of meer spelers tegelijk kunnen.
+  function overlapVanDag(lijst) {
+    const segs = [];
+    for (let t = P.DAG_VAN; t < 1440; t += P.STAP) {
+      const wie = lijst.filter((x) => P.vrijVanaf(x.tijden, t) > 0);
+      const sleutel = wie.map((x) => x.i).join('|');
+      const l = segs[segs.length - 1];
+      if (l && l.sleutel === sleutel && l.tot === t) l.tot = t + P.STAP;
+      else segs.push({ sleutel, van: t, tot: t + P.STAP, wie });
+    }
+    return segs.filter((g) => g.wie.length >= 2);
+  }
+  function toonBeschikbaarheidAlle() {
+    const box = $('beschikbaarheid-alle');
+    box.replaceChildren();
+    if (!isBeheerder) { meld('beschikbaarheid-melding', 'Beheercode klopt niet of is niet ingevuld.', 'fout'); return; }
+    if (!spelers.length) { meld('beschikbaarheid-melding', 'Nog geen spelers.'); return; }
+    meld('beschikbaarheid-melding', '');
+    const metNiveau = (s) => s.naam + ' (' + P.niveauLabel(s.niveau) + ')';
+    const dagen = planDagen.filter((d) => P.dagenTussen(today, P.parseKey(d)) >= P.MIN_DAGEN_VOORUIT);
+    let iets = false;
+    for (const d of dagen) {
+      const lijst = spelers.map((s, i) => ({ s, i, tijden: P.tijdenVan(P.beschikbaarVan(s)[d] || []) })).filter((x) => x.tijden.length);
+      if (!lijst.length) continue;
+      iets = true;
+      const overlap = overlapVanDag(lijst);
+      box.append(h('div', { class: 'moment' + (overlap.some((g) => g.wie.length >= 4) ? ' st-mee' : '') },
+        h('h3', {}, dagLabel(d), h('span', { class: 'badge' }, lijst.length + (lijst.length === 1 ? ' speler' : ' spelers'))),
+        h('ul', { style: 'margin:4px 0' }, lijst.map((x) => h('li', {}, h('strong', {}, metNiveau(x.s)), ': ', x.tijden.map(([a, b]) => P.naarTijd(a) + '–' + P.naarTijd(b)).join(', '),
+          x.s.weken && Object.values(x.s.weken).some((w) => w.standaard && w.tijdvakken && w.tijdvakken[d]) ? h('span', { class: 'hint' }, ' (standaardweek)') : null))),
+        overlap.length
+          ? [h('div', { style: 'margin-top:6px' }, h('strong', {}, 'Overeenkomsten')),
+             h('ul', { style: 'margin:4px 0' }, overlap.map((g) => {
+               const mins = g.tot - g.van;
+               const vier = g.wie.length >= 4 && P.groepenVanVier(g.wie.map((x) => x.s), clubs, d).some((v) => v.duren.some((du) => Number(du) <= mins));
+               return h('li', {}, P.naarTijd(g.van) + '–' + P.naarTijd(g.tot) + ' · ' + g.wie.length + ' spelers: ' + g.wie.map((x) => metNiveau(x.s)).join(', '),
+                 g.wie.length >= 4 ? (vier ? h('span', { class: 'badge' }, 'passend viertal') : h('span', { class: 'badge', style: 'border-color:var(--let);color:var(--let)' }, 'niveau/duur/club past niet')) : null);
+             }))]
+          : h('div', { class: 'hint' }, 'Geen overlap: niemand kan op hetzelfde moment.')));
+    }
+    if (!iets) meld('beschikbaarheid-melding', 'Nog niemand heeft beschikbaarheid ingevuld voor de komende periode.');
+  }
+  $('toon-beschikbaarheid').addEventListener('click', async () => {
+    meld('beschikbaarheid-melding', 'Laden…');
+    await laadSpelers();
+    toonBeschikbaarheidAlle();
+  });
   $('toon-beste').addEventListener('click', async () => {
     liveCache.clear();
     await Promise.all([laadSpelers(), laadPartijen()]);
@@ -1167,7 +1223,9 @@
       });
       return h('div', { class: 'moment st-mee' },
         h('h3', {}, dagLabel(o.datum) + ', ' + o.tijd + '–' + eindTijd(o.tijd, o.duur) + ' · ' + o.club, h('span', { class: 'badge' }, 'baan vrij · 3 van 4')),
-        h('div', {}, 'Met: ' + o.spelers.map((s) => s.naam).join(', ')),
+        h('div', {}, 'Met: ', o.spelers.flatMap((s, i) => [i ? ', ' : '', h('strong', {}, s.naam), ' (' + P.niveauLabel(s.niveau) + ')',
+          s.pastPrecies ? null : h('span', { class: 'let', title: 'Speelsterkte valt net buiten de ingestelde niveau-range van jou of de anderen' }, ' ≈')])),
+        o.spelers.some((s) => !s.pastPrecies) ? h('div', { class: 'hint' }, '≈ = speelsterkte wijkt iets af van wat jij of de anderen hebben ingesteld (maximaal 0,5).') : null,
         h('div', { class: 'hint' }, duurLabel(o.duur) + ' · ' + euro(o.prijs) + ' per baan, ' + euro(o.perPersoon) + ' per persoon'),
         h('div', { class: 'boekrij' }, k), melding);
     }));
