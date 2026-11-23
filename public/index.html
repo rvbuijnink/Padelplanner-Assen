@@ -122,6 +122,7 @@
   .let { color:var(--let); }
   .moment.st-open-partij { background:color-mix(in srgb, var(--fout) 9%, var(--card)); border-color:color-mix(in srgb, var(--fout) 30%, var(--lijn)); border-left-color:var(--fout); }
   .moment.st-gepland { background:color-mix(in srgb, #e8892b 12%, var(--card)); border-color:color-mix(in srgb, #e8892b 35%, var(--lijn)); border-left-color:#e8892b; }
+  .moment.st-mee { border-left-color:var(--accent); background:color-mix(in srgb, var(--accent) 6%, var(--card)); border-color:color-mix(in srgb, var(--accent) 25%, var(--lijn)); }
   .moment.st-geboekt { background:color-mix(in srgb, var(--goed) 11%, var(--card)); border-color:color-mix(in srgb, var(--goed) 30%, var(--lijn)); border-left-color:var(--goed); }
   .nummer { display:inline-flex; align-items:center; gap:6px; margin-left:6px; font-variant-numeric:tabular-nums; }
   a.wa { display:inline-block; font-size:.78rem; font-weight:600; padding:2px 10px; border-radius:99px; background:#25d366; color:#06331a; text-decoration:none; }
@@ -439,6 +440,12 @@
       </div>
       <p class="melding" id="partijen-info" role="status"></p>
       <div id="partijen"></div>
+      <div id="open-blok" hidden>
+        <h3 style="margin:18px 0 4px;font-size:1.05rem">Er mist nog één speler: speel mee en boek de baan</h3>
+        <p class="hint" style="margin-top:0">Op deze momenten kunnen drie spelers die bij jou passen, en er is nu een baan vrij. Doe je mee, dan boek jij de baan; daarna krijgen de andere drie hun uitnodiging.</p>
+        <p class="melding" id="open-info" role="status"></p>
+        <div id="open-partijen"></div>
+      </div>
       <button type="button" class="rustig" id="ververs">Vernieuw</button>
       <div class="uitleg" style="margin:14px 0 0">
         <ol class="stappen">
@@ -1121,6 +1128,51 @@
     }));
   }
 
+  // ---- Partijen met een vrije baan waar nog één speler ontbreekt (live, bij elk bezoek) ----
+  let openRun = 0;
+  async function laadOpenPartijen() {
+    const run = ++openRun;
+    const blok = $('open-blok'), box = $('open-partijen');
+    if (!ik()) { blok.hidden = true; return; }
+    blok.hidden = false;
+    meld('open-info', 'Zoeken naar partijen met een vrije baan…');
+    box.replaceChildren();
+    let data;
+    try {
+      const r = await fetch('/api/partijen/open', { headers: headers() });
+      data = await r.json();
+      if (!r.ok) throw new Error(data.fout || 'Laden mislukt.');
+    } catch (err) { if (run === openRun) meld('open-info', 'Partijen met een vrije baan konden nu niet worden opgehaald. Klik op "Vernieuw".', 'fout'); return; }
+    if (run !== openRun) return;
+    const lijst = data.partijen || [];
+    if (data.reden) { meld('open-info', data.reden, 'fout'); return; }
+    if (!lijst.length) { meld('open-info', 'Er is nu geen moment waarop drie passende spelers kunnen en er een baan vrij is.'); return; }
+    meld('open-info', '');
+    box.replaceChildren(...lijst.map((o) => {
+      const melding = h('div', { class: 'melding', role: 'status' });
+      const k = knop('Ik speel mee en boek de baan', '', async () => {
+        if (!confirm('Je speelt mee op ' + dagLabel(o.datum) + ' om ' + o.tijd + ' bij ' + o.club + ' en boekt de baan (' + euro(o.prijs) + ', ' + euro(o.perPersoon) + ' p.p.). Daarna krijgen de andere drie hun uitnodiging. Doorgaan?')) return;
+        k.disabled = true;
+        try {
+          const r = await fetch('/api/partijen/meedoen', { method: 'POST', headers: headers({ 'content-type': 'application/json' }), body: JSON.stringify({ datum: o.datum, tijd: o.tijd, duur: o.duur, clubId: o.clubId, spelers: o.spelers.map((s) => s.id) }) });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.fout || 'Dat lukte niet.');
+          await laadPartijen();
+          toonPartijen();
+          meld('partijen-info', d.tekst, 'ok');
+          const kaart = d.id && $('partij-' + d.id);
+          if (kaart) kaart.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          laadOpenPartijen();
+        } catch (err) { melding.textContent = err.message; melding.className = 'melding fout'; k.disabled = false; }
+      });
+      return h('div', { class: 'moment st-mee' },
+        h('h3', {}, dagLabel(o.datum) + ', ' + o.tijd + '–' + eindTijd(o.tijd, o.duur) + ' · ' + o.club, h('span', { class: 'badge' }, 'baan vrij · 3 van 4')),
+        h('div', {}, 'Met: ' + o.spelers.map((s) => s.naam).join(', ')),
+        h('div', { class: 'hint' }, duurLabel(o.duur) + ' · ' + euro(o.prijs) + ' per baan, ' + euro(o.perPersoon) + ' per persoon'),
+        h('div', { class: 'boekrij' }, k), melding);
+    }));
+  }
+
   // ---- Prijstekst ----
   function prijsTekst(club, dag, slot) {
     const a = P.prijs(club, 60, dag, slot), b = P.prijs(club, 90, dag, slot);
@@ -1392,7 +1444,7 @@
     $('nieuw-wachtwoord-uitleg').textContent = uitleg;
   }
 
-  function toonAlles() { toonWie(); toonStartlijst(); toonStandaardweek(); toonWeken(); toonRaster(); toonPartijen(); toonPlanner(); toonBanen(); }
+  function toonAlles() { toonWie(); toonStartlijst(); toonStandaardweek(); toonWeken(); toonRaster(); toonPartijen(); toonPlanner(); toonBanen(); laadOpenPartijen(); }
 
   // ---- Vaste instellingen opslaan ----
   $('profiel').addEventListener('submit', async (e) => {
@@ -1447,7 +1499,7 @@
     m.textContent = !code ? '' : isBeheerder ? 'Beheercode klopt.' : 'Beheercode klopt niet.';
     m.className = 'melding' + (code ? (isBeheerder ? ' ok' : ' fout') : '');
   });
-  $('ververs').addEventListener('click', async () => { liveCache.clear(); await Promise.all([laadSpelers(), laadPartijen()]); toonPartijen(); toonPlanner(); toonBanen(); });
+  $('ververs').addEventListener('click', async () => { liveCache.clear(); await Promise.all([laadSpelers(), laadPartijen()]); toonPartijen(); toonPlanner(); toonBanen(); laadOpenPartijen(); });
   $('kies-dag').addEventListener('change', toonBanen);
   // Van/tot: de eindtijd ligt altijd minstens een uur na de begintijd.
   function pasTotAan() {
