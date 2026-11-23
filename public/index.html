@@ -475,7 +475,7 @@
   <div class="paneel" id="paneel-beheer" hidden>
     <section>
       <h2>Beheercode</h2>
-      <p class="hint">Vul hier de beheercode in om <em>Beste momenten</em>, <em>Beschikbaarheid en overeenkomsten</em>, <em>Wie heeft ingevuld?</em> en bij <em>Geplande partijen</em> alle partijen te zien. De code wordt onthouden tot je dit tabblad of de browser sluit.</p>
+      <p class="hint">Vul hier de beheercode in om <em>Beste momenten</em>, <em>Beschikbaarheid en overeenkomsten</em>, <em>Speelsterktes en wensen</em>, <em>Wie heeft ingevuld?</em> en bij <em>Geplande partijen</em> alle partijen te zien. De code wordt onthouden tot je dit tabblad of de browser sluit.</p>
       <div class="rij"><div>
         <label for="beheercode"><strong>Beheercode</strong></label>
         <input type="password" id="beheercode" autocomplete="current-password">
@@ -495,6 +495,13 @@
       <button type="button" class="rustig" id="toon-beschikbaarheid">Toon beschikbaarheid</button>
       <div class="melding" id="beschikbaarheid-melding" role="status"></div>
       <div id="beschikbaarheid-alle"></div>
+    </section>
+    <section>
+      <h2>Speelsterktes en wensen</h2>
+      <p class="hint">Alleen voor de beheerder. Per speler zie je de eigen speelsterkte, met welke speelsterktes die wil spelen, en met wie dat van twee kanten past (beide vallen in elkaars range).</p>
+      <button type="button" class="rustig" id="toon-wensen">Toon speelsterktes</button>
+      <div class="melding" id="wensen-melding" role="status"></div>
+      <div class="scroll"><table class="overzicht" id="wensen"></table></div>
     </section>
     <section>
       <h2>Wie heeft ingevuld?</h2>
@@ -950,6 +957,32 @@
   }
   $('toon-overzicht').addEventListener('click', laadOverzicht);
 
+  // ---- Beheer: met welke speelsterktes willen spelers spelen ----
+  function toonWensen() {
+    const t = $('wensen');
+    t.replaceChildren();
+    if (!isBeheerder) { meld('wensen-melding', 'Beheercode klopt niet of is niet ingevuld.', 'fout'); return; }
+    if (!spelers.length) { meld('wensen-melding', 'Nog geen spelers.'); return; }
+    meld('wensen-melding', '');
+    const lijst = [...spelers].sort((a, b) => P.niveauGetal(b.niveau) - P.niveauGetal(a.niveau) || a.naam.localeCompare(b.naam));
+    const kort = (s) => s.naam + ' (' + P.niveauLabel(s.niveau) + ')';
+    t.append(
+      h('thead', {}, h('tr', {}, h('th', {}, 'Speler'), h('th', {}, 'Eigen niveau'), h('th', {}, 'Wil spelen met'), h('th', {}, 'Past van twee kanten met'))),
+      h('tbody', {}, lijst.map((s) => {
+        const past = lijst.filter((o) => o !== s && P.wilMet(s.wensNiveaus, o.niveau) && P.wilMet(o.wensNiveaus, s.niveau));
+        return h('tr', {},
+          h('td', {}, s.naam),
+          h('td', {}, P.niveauLabel(s.niveau)),
+          h('td', {}, P.wensLabel(s.wensNiveaus) || '–'),
+          h('td', { style: 'text-align:left' }, past.length ? past.length + ': ' + past.map(kort).join(', ') : h('span', { class: 'hint' }, 'niemand')));
+      })));
+  }
+  $('toon-wensen').addEventListener('click', async () => {
+    meld('wensen-melding', 'Laden…');
+    await laadSpelers();
+    toonWensen();
+  });
+
   // ---- Beheer: beschikbaarheid van iedereen en overeenkomsten ----
   // Per dag: wie kan wanneer, en de tijden waarop twee of meer spelers tegelijk kunnen.
   function overlapVanDag(lijst) {
@@ -979,7 +1012,7 @@
       const overlap = overlapVanDag(lijst);
       box.append(h('div', { class: 'moment' + (overlap.some((g) => g.wie.length >= 4) ? ' st-mee' : '') },
         h('h3', {}, dagLabel(d), h('span', { class: 'badge' }, lijst.length + (lijst.length === 1 ? ' speler' : ' spelers'))),
-        h('ul', { style: 'margin:4px 0' }, lijst.map((x) => h('li', {}, h('strong', {}, metNiveau(x.s)), ': ', x.tijden.map(([a, b]) => P.naarTijd(a) + '–' + P.naarTijd(b)).join(', '),
+        h('ul', { style: 'margin:4px 0' }, lijst.map((x) => h('li', {}, h('strong', {}, metNiveau(x.s)), P.wensLabel(x.s.wensNiveaus) ? h('span', { class: 'hint' }, ' wil ' + P.wensLabel(x.s.wensNiveaus)) : null, ': ', x.tijden.map(([a, b]) => P.naarTijd(a) + '–' + P.naarTijd(b)).join(', '),
           x.s.weken && Object.values(x.s.weken).some((w) => w.standaard && w.tijdvakken && w.tijdvakken[d]) ? h('span', { class: 'hint' }, ' (standaardweek)') : null))),
         overlap.length
           ? [h('div', { style: 'margin-top:6px' }, h('strong', {}, 'Overeenkomsten')),

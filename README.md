@@ -13,6 +13,7 @@ Een kleine Netlify-site waarmee een groep padelspelers hun niveau, gewenste tege
 - **Er mist nog één speler**: bij *Geplande partijen* ziet elke speler meteen (live, bij elk bezoek en bij *Vernieuw*) de momenten waarop drie spelers met ongeveer zijn speelsterkte (tot 0,5 buiten de ingestelde niveau-ranges) kunnen en er nu een baan vrij is bij een club die alle vier op ja hebben. Met *Ik speel mee en boek de baan* wordt de partij direct aangemaakt met die speler als boeker; na *Baan is geboekt* krijgen de andere drie hun uitnodiging. Vlak voor het aanmaken controleert de site nog een keer live of de baan vrij is. Per moment staan de voornamen en speelsterktes van de drie spelers erbij; wie net buiten een ingestelde range valt krijgt een ≈, zodat de speler zelf kiest of hij aansluit. De gewone automatische planning blijft de niveau-ranges strikt volgen.
 - **Wie heeft ingevuld** (alleen beheerder): overzicht per speler per week.
 - **Beschikbaarheid en overeenkomsten** (alleen beheerder): per dag wie wanneer kan (ingevuld of via de standaardweek), met speelsterkte, en de tijden waarop twee of meer spelers elkaar overlappen. Bij vier of meer staat erbij of er een viertal tussen zit dat qua niveau, speelduur en club past.
+- **Speelsterktes en wensen** (alleen beheerder): per speler de eigen speelsterkte, de range waarmee die wil spelen en met welke spelers dat van twee kanten past.
 - **Beste momenten** (alleen beheerder): zoekt momenten waarop minstens vier mensen kunnen die bij elkaar passen. Spelers passen bij elkaar als ze elkaars niveau accepteren, minstens één speelduur gemeen hebben en er een club is waar niemand van het viertal "Niet" heeft gekozen. Daarna wordt op prijs gesorteerd.
 - **Banen en prijzen**: vijf clubs (Peakz Padel Assen, ATV De Hertenkamp, Valley Padel Assen, Plaza Sportz Assen en, als laatste keus, Padel Rolde), alleen dubbelbanen, met status "vrij / bezet / nog niet boekbaar (opent over X dagen)" en prijs per baan en per persoon.
 
@@ -55,7 +56,7 @@ Deze site gebruikt een Netlify-functie met Netlify Database (Postgres) om speler
 1. Zet de map in een GitHub-repository en koppel die aan een site in Netlify.
 2. Of gebruik de Netlify CLI: `npm install`, `npx netlify login` en dan `npx netlify deploy --prod`.
 
-Alleen ingelogde spelers kunnen de site gebruiken; ze zien hun eigen gegevens en partijen, en van medespelers alleen wat nodig is. Stel `BEHEER_CODE` in (een lange, willekeurige code) voor de beheerweergaven: *Beste momenten*, *Beschikbaarheid en overeenkomsten*, *Wie heeft ingevuld?* en alle geplande partijen.
+Alleen ingelogde spelers kunnen de site gebruiken; ze zien hun eigen gegevens en partijen, en van medespelers alleen wat nodig is. Stel `BEHEER_CODE` in (een lange, willekeurige code) voor de beheerweergaven: *Beste momenten*, *Beschikbaarheid en overeenkomsten*, *Speelsterktes en wensen*, *Wie heeft ingevuld?* en alle geplande partijen.
 
 ## Bestanden
 
