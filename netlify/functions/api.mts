@@ -14,10 +14,11 @@
 // GET  /api/agenda?t=...     -> agenda-afspraak (.ics) van een partij, via de sleutel uit de e-mail
 // GET  /api/partijen/open    -> momenten waarop drie passende spelers kunnen en live een baan vrij is (ingelogd)
 // POST /api/partijen/meedoen { datum, tijd, duur, clubId, spelers } -> "Ik speel mee en boek de baan"
+// GET  /api/partijen/gat     -> geboekte partijen waar nog één speler ontbreekt: alle voor de beheerder, anders alleen waar jij past (ingelogd)
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { getUser, verifyRequestOrigin, AuthError, admin } from "@netlify/identity";
 import { db } from "../../db/index.js";
-import { beantwoord, markeerGeboekt, meldBetaallink, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, openPartijenVoor, speelMeeEnBoek, beheerKandidaten, beheerToevoegen, beheerGastToevoegen, beheerVerwijderen, type Keuze } from "../../lib/automatisch.js";
+import { beantwoord, markeerGeboekt, meldBetaallink, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, openPartijenVoor, speelMeeEnBoek, beheerKandidaten, beheerToevoegen, beheerGastToevoegen, beheerVerwijderen, partijenMetGat, type Keuze } from "../../lib/automatisch.js";
 import { leesTelefoon, slaTelefoonOp, zichtbareTelefoons, waLink, toonNummer } from "../../lib/telefoon.js";
 import { verstuurTestmail } from "../../lib/mail.js";
 // @ts-ignore - gedeelde planner-logica (CommonJS)
@@ -515,6 +516,11 @@ export default async (req: Request) => {
     if (pad === "/api/partijen/open" && req.method === "GET") {
       const mij = await mijnSpeler(user);
       return json(mij ? await openPartijenVoor(mij.id) : { partijen: [] });
+    }
+    if (pad === "/api/partijen/gat" && req.method === "GET") {
+      const beheer = isBeheer(req);
+      const mij = await mijnSpeler(user);
+      return json({ partijen: await partijenMetGat(mij?.id ?? null, beheer), beheer });
     }
     if (pad === "/api/partijen/meedoen" && req.method === "POST") {
       const mij = await mijnSpeler(user);
