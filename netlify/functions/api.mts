@@ -19,6 +19,7 @@ import { getUser, verifyRequestOrigin, AuthError, admin } from "@netlify/identit
 import { db } from "../../db/index.js";
 import { beantwoord, markeerGeboekt, meldBetaallink, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, openPartijenVoor, speelMeeEnBoek, beheerKandidaten, beheerToevoegen, beheerVerwijderen, type Keuze } from "../../lib/automatisch.js";
 import { leesTelefoon, slaTelefoonOp, zichtbareTelefoons, waLink, toonNummer } from "../../lib/telefoon.js";
+import { verstuurTestmail } from "../../lib/mail.js";
 // @ts-ignore - gedeelde planner-logica (CommonJS)
 import Planner from "../../src/planner.cjs";
 const P: any = Planner;
@@ -512,6 +513,13 @@ export default async (req: Request) => {
       const r = await speelMeeEnBoek(mij.id, await leesBody(req));
       return r.ok ? json({ ok: true, tekst: r.tekst, id: r.id, boeken: r.boeken }) : fout(r.fout, r.status);
     }
+    if (pad === "/api/testmail" && req.method === "POST") {
+      if (!isBeheer(req)) return fout("Beheercode klopt niet.", 401);
+      if (!user.email) return fout("Je account heeft geen e-mailadres.");
+      const mij = await mijnSpeler(user);
+      const r = await verstuurTestmail(user.email, mij?.naam);
+      return r.ok ? json({ ok: true, tekst: `Testmail verstuurd naar ${user.email} via ${r.manier}. Kijk ook even in je spam.` }) : fout(r.fout, 502);
+    }
     if (pad === "/api/account" && req.method === "DELETE") { verifyRequestOrigin(req); return await verwijderAccount(user); }
     const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|betaald|nietbetaald|keuze|voorstel|kandidaten|beheerkandidaten|beheertoevoegen|beheerverwijderen)$/.exec(pad);
     if (m && req.method === "POST") return await wijzigPartij(user, m[1], await leesBody(req), isBeheer(req));
@@ -525,4 +533,4 @@ export default async (req: Request) => {
   }
 };
 
-export const config = { path: ["/api/spelers", "/api/profiel", "/api/beschikbaarheid", "/api/overzicht", "/api/partijen", "/api/partijen/*", "/api/antwoord", "/api/agenda", "/api/standaardweek", "/api/account"] };
+export const config = { path: ["/api/spelers", "/api/profiel", "/api/beschikbaarheid", "/api/overzicht", "/api/partijen", "/api/partijen/*", "/api/antwoord", "/api/agenda", "/api/standaardweek", "/api/account", "/api/testmail"] };

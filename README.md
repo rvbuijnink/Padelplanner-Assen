@@ -35,7 +35,7 @@ Alles draait om het begin van de partij (T).
 - Nummers staan nooit in een e-mail, alleen op de partijpagina, met een knop *Stuur bericht via WhatsApp* (wa.me-link). Geen WhatsApp Business-koppeling.
 - Je kunt je nummer altijd aanpassen bij Vaste instellingen (leegmaken kan niet, het nummer is verplicht). *Account verwijderen* wist je speler, beschikbaarheid, nummer en inlogaccount, en meldt je eerst netjes af voor komende partijen.
 
-E-mail kan gratis via Gmail. Zet `SMTP_USER` op het Gmail-adres en `SMTP_PASS` op een app-wachtwoord van dat account (Google-account → Beveiliging → tweestapsverificatie aan → App-wachtwoorden). Je kunt ook Brevo gebruiken (`BREVO_API_KEY` + `MAIL_AFZENDER`) of Resend (`RESEND_API_KEY` + `MAIL_AFZENDER`). Zonder deze instellingen werkt alles wel, maar dan staan de uitnodigingen alleen op de site.
+E-mail gaat bij voorkeur via **Brevo**: zet `BREVO_API_KEY` (API-sleutel uit Brevo → SMTP & API) en `MAIL_AFZENDER` (een afzenderadres dat je in Brevo hebt geverifieerd bij Senders). Staan die er allebei, dan wordt Brevo gebruikt. Anders kan het gratis via Gmail: zet `SMTP_USER` op het Gmail-adres en `SMTP_PASS` op een app-wachtwoord van dat account (Google-account → Beveiliging → tweestapsverificatie aan → App-wachtwoorden). Resend (`RESEND_API_KEY` + `MAIL_AFZENDER`) kan ook. Met de knop *Stuur testmail* in het tabblad Beheer (met beheercode) controleer je meteen of het werkt. Zonder deze instellingen werkt alles wel, maar dan staan de uitnodigingen alleen op de site.
 
 ## Koppeling met de clubs
 

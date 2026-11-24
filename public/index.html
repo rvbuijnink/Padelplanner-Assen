@@ -485,6 +485,12 @@
       <div class="melding" id="beheercode-melding" role="status"></div>
     </section>
     <section>
+      <h2>E-mail testen</h2>
+      <p class="hint">Alleen voor de beheerder. Stuurt meteen een testmail naar het e-mailadres van je eigen account (ook tussen 22:00 en 08:00), zodat je ziet of het versturen werkt. Gaat het mis, dan staat hieronder de foutmelding.</p>
+      <button type="button" id="stuur-testmail">Stuur testmail</button>
+      <div class="melding" id="testmail-melding" role="status"></div>
+    </section>
+    <section>
       <h2>Beste momenten</h2>
       <p class="hint">Alleen voor de beheerder. Momenten waarop vier passende spelers kunnen, met live vrije banen. De site plant deze momenten zelf in. Vul bovenaan dit tabblad de beheercode in en klik op <em>Toon beste momenten</em>.</p>
       <button type="button" class="rustig" id="toon-beste">Toon beste momenten</button>
@@ -958,6 +964,20 @@
     toonOverzicht();
   }
   $('toon-overzicht').addEventListener('click', laadOverzicht);
+
+  // ---- Beheer: testmail ----
+  $('stuur-testmail').addEventListener('click', async () => {
+    const knop = $('stuur-testmail');
+    knop.disabled = true;
+    meld('testmail-melding', 'Bezig met versturen…');
+    try {
+      const r = await fetch('/api/testmail', { method: 'POST', headers: headers({ 'content-type': 'application/json' }), body: '{}' });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.fout || 'Versturen mislukt.');
+      meld('testmail-melding', data.tekst, 'ok');
+    } catch (err) { meld('testmail-melding', err.message, 'fout'); }
+    knop.disabled = false;
+  });
 
   // ---- Beheer: met welke speelsterktes willen spelers spelen ----
   function toonWensen() {
