@@ -173,13 +173,15 @@ const teDichtBij = (ctx: Context, s: Speler, datum: string, behalve?: number) =>
   );
 };
 function heeftRuimte(ctx: Context, s: Speler, datum: string, behalve?: number) {
+  // "Wanneer het lukt": geen maximum per week; alleen eigen beschikbaarheid, rustdagen en één partij per dag tellen.
+  if (s.frequentie === "wanneer-het-lukt") return true;
   const mijn = ctx.partijen.filter((p) => p.id !== behalve && !p.geannuleerd && p.rijen.some((r) => r.spelerId === s.id && isActief(r)));
   const week = maandag(datum);
   const dezeWeek = mijn.filter((p) => maandag(p.datum) === week).length;
   if (s.frequentie === "3x-per-week") return dezeWeek < 3;
   if (s.frequentie === "2x-per-week") return dezeWeek < 2;
   if (s.frequentie === "tweewekelijks") return mijn.filter((p) => Math.abs(utc(maandag(p.datum)) - utc(week)) <= 7 * DAG).length === 0;
-  return dezeWeek === 0;
+  return dezeWeek === 0; // wekelijks
 }
 // Vervangers (en alle spelers) moeten de gekozen club op "ja" hebben staan.
 const clubJa = (s: Speler, clubId: string, datum: string) => P.voorkeurVan(s, clubId, datum) !== "niet";
@@ -775,7 +777,8 @@ async function liveKeuze(ctx: Context, datum: string, slot: any, duur: number, o
 }
 
 function zonderAfgezegdeDagen(ctx: Context, s: Speler, dagen: string[]): Speler {
-  const weg = dagen.filter((d) => kanNietOpDag(ctx, s.id, d));
+  // Ook dagen waarop iemand al speelt (of te kort na/voor een partij zit) eruit: nooit twee keer op een dag.
+  const weg = dagen.filter((d) => kanNietOpDag(ctx, s.id, d) || speeltAlOpDag(ctx, s.id, d) || teDichtBij(ctx, s, d));
   if (!weg.length) return s;
   const weken: Speler["weken"] = {};
   for (const [w, v] of Object.entries(s.weken)) {
