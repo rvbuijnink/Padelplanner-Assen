@@ -1000,6 +1000,42 @@ export async function openPartijenVoor(spelerId: number): Promise<{ partijen: Op
   return { partijen };
 }
 
+// ---- Bestaande partijen waar nog één speler ontbreekt ----
+// Geboekt, niet geannuleerd, nog niet begonnen, drie bevestigd en niet "doorgaan met drie".
+// De beheerder ziet ze allemaal; een speler alleen die waar een plek vrij is en waar hij zelf bij past.
+export type GatPartij = { id: number; datum: string; tijd: string; duur: number; clubId: string; club: string; perPersoon: number | null; urenTot: number;
+  spelers: { naam: string; niveau: string | null; gast: boolean; status: string }[]; boeker: string | null; plekVrij: boolean; besluit: string | null };
+export async function partijenMetGat(spelerId: number | null, beheer: boolean): Promise<GatPartij[]> {
+  const ctx = await laad();
+  const ik = spelerVan(ctx, spelerId);
+  const uit: GatPartij[] = [];
+  for (const p of ctx.partijen) {
+    if (p.geannuleerd || !p.geboekt || startVan(p) < Date.now() || p.besluit === "drie") continue;
+    if (bevestigdVan(p).length !== MAX_SPELERS - 1) continue;
+    const plekVrij = spelendVan(p).length < MAX_SPELERS;
+    if (!beheer) {
+      if (!ik || ik.gast || !plekVrij || !ctx.metTelefoon.has(ik.id)) continue;
+      if (p.rijen.some((r) => r.spelerId === ik.id && (isActief(r) || nietOpDag(r) || r.status === "verwijderd"))) continue;
+      const groep = spelendVan(p).map((r) => spelerVan(ctx, r.spelerId)).filter(Boolean) as Speler[];
+      // Zelf aansluiten is vrijwillig (zoals bij "speel mee"): club op ja, beschikbaar, speelsterkte met kleine marge,
+      // nog geen partij die dag en rustdagen; het maximum aantal partijen per week telt hier niet.
+      if (!clubJa(ik, p.clubId, p.datum) || !kanOp(ik, p.datum, p.tijd, p.duur) || !groep.every((g) => g.gast || nivBijna(ik, g)) || !magOpDag(ctx, ik, p.datum)) continue;
+    }
+    uit.push({
+      id: p.id, datum: p.datum, tijd: p.tijd, duur: p.duur, clubId: p.clubId, club: clubVan(ctx, p.clubId).naam,
+      perPersoon: bedragPP(ctx, p), urenTot: Math.round(urenTot(p)),
+      spelers: vierVan(p).map((r) => {
+        const s = spelerVan(ctx, r.spelerId);
+        const naam = s?.naam ?? "?";
+        return { naam: beheer ? naam : voornaam(naam), niveau: s && !s.gast ? s.niveau : null, gast: !!s?.gast, status: r.status };
+      }),
+      boeker: beheer ? spelerVan(ctx, p.boekerId)?.naam ?? null : null,
+      plekVrij, besluit: beheer ? p.besluit : null,
+    });
+  }
+  return uit.sort((a, b) => a.datum.localeCompare(b.datum) || a.tijd.localeCompare(b.tijd));
+}
+
 // "Ik speel mee en boek de baan": de partij wordt meteen aangemaakt met deze speler als boeker.
 // Na "Baan is geboekt" krijgen de andere drie hun uitnodiging (zoals bij elke automatische partij).
 export async function speelMeeEnBoek(spelerId: number, b: any): Promise<Antwoord & { id?: number }> {

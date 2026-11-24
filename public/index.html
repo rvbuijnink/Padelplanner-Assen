@@ -451,6 +451,7 @@
     <nav class="ankers" aria-label="Op deze pagina">
       <span class="ankers-kop">Op deze pagina:</span>
       <a href="#deel-partijen">📅 Mijn geplande partijen</a>
+      <a href="#deel-gat" id="anker-gat" hidden>🙋 Nog 1 speler gezocht</a>
       <a href="#deel-open" id="anker-open">⚡ Partijen met nog 1 plekje: reageer snel!</a>
       <a href="#deel-banen">🎾 Vrije banen in Assen e.o.</a>
       <a href="#deel-uitleg" class="opvallend">❓ Hoe werkt het?</a>
@@ -474,6 +475,15 @@
         <p class="melding" id="partijen-info" role="status"></p>
         <div id="partijen"></div>
         <button type="button" class="rustig" id="ververs">Vernieuw</button>
+      </div>
+    </section>
+
+    <section id="deel-gat" hidden>
+      <div class="deel">
+        <div class="deel-kop"><h2>Nog 1 speler gezocht</h2><span class="deel-sub">Geplande partijen met een geboekte baan waar nog één speler ontbreekt</span></div>
+        <div class="uitleg"><p id="gat-uitleg"></p></div>
+        <p class="melding" id="gat-info" role="status"></p>
+        <div id="gat-partijen"></div>
       </div>
     </section>
 
@@ -1126,6 +1136,7 @@
       if (!r.ok) throw new Error(data.fout || 'Dat lukte niet.');
       await laadPartijen();
       toonPartijen();
+      laadGatPartijen();
       if (data.tekst) meld('partijen-info', data.tekst, 'ok');
       return true;
     } catch (err) {
@@ -1316,6 +1327,67 @@
         h('div', { class: 'boekrij' }, knoppen), melding);
       if (gevraagd && String(p.id) === gevraagd) setTimeout(() => kaart.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
       return kaart;
+    }));
+  }
+
+  // ---- Geplande partijen waar nog één speler ontbreekt ----
+  // De beheerder ziet ze allemaal; een speler alleen die waar een plek vrij is en waar hij zelf bij past.
+  let gatRun = 0;
+  async function laadGatPartijen() {
+    const run = ++gatRun;
+    const blok = $('deel-gat'), anker = $('anker-gat'), box = $('gat-partijen');
+    const verberg = () => { blok.hidden = true; anker.hidden = true; box.replaceChildren(); };
+    if (!ik() && !isBeheerder) return verberg();
+    let data;
+    try {
+      const r = await fetch('/api/partijen/gat', { headers: headers() });
+      data = await r.json();
+      if (!r.ok) throw new Error(data.fout || 'Laden mislukt.');
+    } catch (err) { if (run === gatRun) verberg(); return; }
+    if (run !== gatRun) return;
+    const beheer = !!data.beheer;
+    const lijst = data.partijen || [];
+    if (!beheer && !lijst.length) return verberg();
+    blok.hidden = false; anker.hidden = false;
+    $('gat-uitleg').textContent = beheer
+      ? 'Je ziet dit overzicht omdat je de beheercode hebt ingevuld. Hier staan alle geplande partijen met een geboekte baan waar drie spelers hebben bevestigd en de vierde nog ontbreekt. Andere spelers zien een partij hier alleen als ze er zelf in passen (beschikbaarheid, club op "ja", speelsterkte en nog geen partij die dag).'
+      : 'Bij deze partijen is de baan al geboekt en hebben drie spelers bevestigd. Ze passen bij jouw beschikbaarheid, clubs en speelsterkte. Doe je mee, dan ben je meteen bevestigd en is de partij compleet.';
+    if (!lijst.length) { meld('gat-info', 'Er zijn nu geen partijen waar nog één speler ontbreekt.'); box.replaceChildren(); return; }
+    meld('gat-info', '');
+    box.replaceChildren(...lijst.map((g) => {
+      const melding = h('div', { class: 'melding', role: 'status' });
+      const wanneer = g.urenTot < 48 ? 'over ' + g.urenTot + ' uur' : 'over ' + Math.round(g.urenTot / 24) + ' dagen';
+      const spelersTekst = g.spelers.flatMap((s, i) => [i ? ', ' : '', h('strong', {}, s.naam), s.gast ? ' (gast)' : s.niveau ? ' (' + P.niveauLabel(s.niveau) + ')' : '',
+        beheer && s.status !== 'bevestigd' ? h('span', { class: 'sp-wacht' }, ' – ' + (s.status === 'uitgenodigd' ? 'uitgenodigd, nog geen reactie' : s.status)) : null]);
+      const knoppen = [];
+      if (beheer) {
+        knoppen.push(knop('Bekijk de partij', 'rustig', () => {
+          const kaart = $('partij-' + g.id);
+          if (kaart) kaart.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }));
+      } else {
+        const k = knop('Ik doe mee', '', async () => {
+          if (!confirm('Je doet mee op ' + dagLabel(g.datum) + ' om ' + g.tijd + ' bij ' + g.club + (g.perPersoon != null ? ' (' + euro(g.perPersoon) + ' p.p.)' : '') + '. Je bent dan meteen bevestigd. Doorgaan?')) return;
+          k.disabled = true;
+          const ok = await partijActie('/aanmelden', { id: g.id }, melding);
+          if (!ok) { k.disabled = false; return; }
+          const kaart = $('partij-' + g.id);
+          if (kaart) kaart.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        knoppen.push(k);
+      }
+      const status = !beheer ? null : !g.plekVrij ? 'Er is al een vierde speler uitgenodigd; wacht op een reactie.'
+        : g.besluit === 'zoeken' ? 'De boeker koos: we zoeken een vervanger.'
+        : g.urenTot > 72 ? 'De site zoekt automatisch een vervanger.'
+        : g.urenTot > 50 ? 'De boeker moet kiezen: vervanger zoeken of annuleren.'
+        : 'De boeker moet beslissen: annuleren of doorgaan met drie.';
+      return h('div', { class: 'moment st-open-partij' },
+        h('h3', {}, dagLabel(g.datum) + ', ' + g.tijd + '–' + eindTijd(g.tijd, g.duur) + ' · ' + g.club, h('span', { class: 'badge oranje' }, '3 van 4 · ' + wanneer)),
+        h('div', {}, beheer ? 'Spelers: ' : 'Met: ', ...spelersTekst),
+        beheer && g.boeker ? h('div', { class: 'hint' }, g.boeker + ' heeft de baan geboekt.') : null,
+        status ? h('div', { class: 'hint' }, status) : null,
+        h('div', { class: 'hint' }, duurLabel(g.duur) + (g.perPersoon != null ? ' · ' + euro(g.perPersoon) + ' per persoon' : '')),
+        h('div', { class: 'boekrij' }, knoppen), melding);
     }));
   }
 
@@ -1637,7 +1709,7 @@
     $('nieuw-wachtwoord-uitleg').textContent = uitleg;
   }
 
-  function toonAlles() { toonWie(); toonStartlijst(); toonStandaardweek(); toonWeken(); toonRaster(); toonPartijen(); toonPlanner(); toonBanen(); laadOpenPartijen(); }
+  function toonAlles() { toonWie(); toonStartlijst(); toonStandaardweek(); toonWeken(); toonRaster(); toonPartijen(); toonPlanner(); toonBanen(); laadOpenPartijen(); laadGatPartijen(); }
 
   // ---- Vaste instellingen opslaan ----
   $('profiel').addEventListener('submit', async (e) => {
@@ -1687,12 +1759,12 @@
   $('beheercode').addEventListener('change', async () => {
     const code = $('beheercode').value.trim();
     try { code ? sessionStorage.setItem('beheercode', code) : sessionStorage.removeItem('beheercode'); } catch (e) {}
-    await laadPartijen(); toonPartijen();
+    await laadPartijen(); toonPartijen(); laadGatPartijen();
     const m = $('beheercode-melding');
     m.textContent = !code ? '' : isBeheerder ? 'Beheercode klopt.' : 'Beheercode klopt niet.';
     m.className = 'melding' + (code ? (isBeheerder ? ' ok' : ' fout') : '');
   });
-  $('ververs').addEventListener('click', async () => { liveCache.clear(); await Promise.all([laadSpelers(), laadPartijen()]); toonPartijen(); toonPlanner(); toonBanen(); laadOpenPartijen(); });
+  $('ververs').addEventListener('click', async () => { liveCache.clear(); await Promise.all([laadSpelers(), laadPartijen()]); toonPartijen(); toonPlanner(); toonBanen(); laadOpenPartijen(); laadGatPartijen(); });
   // Links bovenaan Geplande partijen: scroll naar het gekozen deel.
   document.querySelectorAll('.ankers a[href^="#"]').forEach((a) => a.addEventListener('click', (e) => {
     const doel = document.querySelector(a.getAttribute('href'));
