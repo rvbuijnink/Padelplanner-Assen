@@ -1,7 +1,7 @@
-// E-mail versturen voor de Padelplanner. Drie mogelijkheden (de eerste die is ingesteld wordt gebruikt):
+// E-mail versturen voor de Padelplanner. Drie mogelijkheden (de eerste die volledig is ingesteld wordt gebruikt):
+// - Brevo: BREVO_API_KEY en MAIL_AFZENDER (een in Brevo geverifieerd afzenderadres).
 // - Gmail (of andere SMTP): SMTP_USER (je Gmail-adres) en SMTP_PASS (een app-wachtwoord). Gratis, tot ~500 mails per dag.
 //   Optioneel SMTP_HOST/SMTP_PORT voor een andere mailprovider (standaard smtp.gmail.com:465).
-// - Brevo: BREVO_API_KEY en MAIL_AFZENDER (een in Brevo geverifieerd adres).
 // - Resend: RESEND_API_KEY en MAIL_AFZENDER.
 // Zonder instellingen worden er geen e-mails verstuurd; de site blijft gewoon werken (uitnodigingen staan ook op de site).
 // Tussen 22:00 en 08:00 (Nederlandse tijd) gaan er geen e-mails uit: die komen in een wachtrij en gaan om 08:00 de deur uit.
@@ -16,8 +16,12 @@ export type Mail = { aan: string; naam?: string; onderwerp: string; tekst: strin
 
 const env = (k: string): string | undefined => (globalThis as any).Netlify?.env?.get(k) ?? process.env[k];
 
-const smtpAan = () => !!(env("SMTP_USER") && env("SMTP_PASS"));
-export const mailAan = () => smtpAan() || (!!(env("BREVO_API_KEY") || env("RESEND_API_KEY")) && !!env("MAIL_AFZENDER"));
+const brevoAan = () => !!(env("BREVO_API_KEY") && env("MAIL_AFZENDER"));
+const smtpAan = () => !brevoAan() && !!(env("SMTP_USER") && env("SMTP_PASS"));
+const resendAan = () => !!(env("RESEND_API_KEY") && env("MAIL_AFZENDER"));
+export const mailAan = () => brevoAan() || smtpAan() || resendAan();
+// Welke verzendmanier nu wordt gebruikt (voor de testmail).
+export const mailManier = () => (brevoAan() ? "Brevo" : smtpAan() ? "Gmail/SMTP" : resendAan() ? "Resend" : null);
 
 let smtp: ReturnType<typeof nodemailer.createTransport> | null = null;
 function smtpTransport() {
@@ -67,7 +71,7 @@ async function verstuurEen(m: Mail) {
   const afzender = env("MAIL_AFZENDER")!;
   const b64 = (t: string) => Buffer.from(t, "utf8").toString("base64");
   const bijlagen = m.bijlagen ?? [];
-  const brevo = env("BREVO_API_KEY");
+  const brevo = brevoAan() ? env("BREVO_API_KEY") : undefined;
   const r = brevo
     ? await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
@@ -119,6 +123,21 @@ export async function verstuurWachtrij() {
   await db.delete(mailWachtrij).where(inArray(mailWachtrij.id, rijen.map((r) => r.id)));
   await verstuurNu(rijen.map((r) => r.mail as Mail));
   return rijen.length;
+}
+
+// Testmail voor de beheerder: gaat meteen (ook in de stille uren) en geeft een eventuele fout terug.
+export async function verstuurTestmail(aan: string, naam?: string) {
+  const manier = mailManier();
+  if (!manier) {
+    const mist = env("BREVO_API_KEY") && !env("MAIL_AFZENDER") ? " (BREVO_API_KEY staat er, maar MAIL_AFZENDER ontbreekt)" : "";
+    return { ok: false as const, fout: "E-mail staat uit: er is geen verzendmanier volledig ingesteld" + mist + "." };
+  }
+  try {
+    await verstuurEen({ aan, naam, onderwerp: "Testmail van de Padelplanner", tekst: `Hoi${naam ? " " + naam : ""},\n\nDit is een testmail. Verstuurd via ${manier}. Komt deze aan, dan werkt e-mail.` });
+    return { ok: true as const, manier };
+  } catch (e) {
+    return { ok: false as const, fout: `Versturen via ${manier} mislukt: ${e instanceof Error ? e.message : String(e)}`.slice(0, 400) };
+  }
 }
 
 async function verstuurNu(mails: Mail[]) {
