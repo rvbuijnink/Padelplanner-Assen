@@ -481,8 +481,8 @@
       <div class="deel">
         <div class="deel-kop"><h2>Nog 1 speler gezocht; reageer snel!</h2><span class="deel-sub">Wil je extra spelen? Sluit aan bij drie spelers die al kunnen</span></div>
         <div class="uitleg">
-          <p><strong>Wat is dit?</strong> Hier staan momenten waarop al <strong>drie spelers</strong> van ongeveer jouw speelsterkte kunnen en er <strong>nu een baan vrij is</strong>. Alleen de vierde speler ontbreekt nog. Dit is een aanbod: je hoeft niets te doen als je niet wilt.</p>
-          <p style="margin-top:6px"><strong>Wat moet je doen?</strong> Lijkt een moment je leuk? Klik op <em>Ik speel mee en boek de baan</em>. Jij boekt dan de baan bij de club, daarna krijgen de andere drie spelers hun uitnodiging. Je ziet vooraf wie er meedoen en wat hun speelsterkte is. Die kan tot 0,5 afwijken van de niveaus die jij of de anderen hebben ingesteld.</p>
+          <p>Hier staan momenten waarop <strong>drie spelers</strong> van ongeveer jouw speelsterkte kunnen en <strong>een baan vrij is</strong>. Alleen de vierde speler ontbreekt. Dit is een aanbod: je hoeft niets te doen als je niet wilt.</p>
+          <p style="margin-top:6px"><strong>Wat moet je doen?</strong> Klik op <em>Ik speel mee en boek de baan</em>. Jij boekt dan de baan bij de club, daarna krijgen de andere drie spelers hun uitnodiging. Je ziet vooraf wie er meedoen en wat hun speelsterkte is.</p>
         </div>
         <p class="melding" id="open-info" role="status"></p>
         <div id="open-partijen"></div>
@@ -1394,17 +1394,25 @@
       const k = knop('Ik speel mee en boek de baan', '', async () => {
         if (!confirm('Je speelt mee op ' + dagLabel(o.datum) + ' om ' + o.tijd + ' bij ' + o.club + ' en boekt de baan (' + euro(o.prijs) + ', ' + euro(o.perPersoon) + ' p.p.). Daarna krijgen de andere drie hun uitnodiging. Doorgaan?')) return;
         k.disabled = true;
+        // Meteen een tabblad openen (nog tijdens de klik, anders blokkeert de browser het) en daarin de boekingssite laden.
+        const tab = window.open('', '_blank');
+        if (tab) { try { tab.opener = null; tab.document.title = 'Baan boeken…'; tab.document.body.textContent = 'Even geduld, de boekingssite van de club wordt geopend…'; } catch (e) {} }
         try {
           const r = await fetch('/api/partijen/meedoen', { method: 'POST', headers: headers({ 'content-type': 'application/json' }), body: JSON.stringify({ datum: o.datum, tijd: o.tijd, duur: o.duur, clubId: o.clubId, spelers: o.spelers.map((s) => s.id) }) });
           const d = await r.json();
           if (!r.ok) throw new Error(d.fout || 'Dat lukte niet.');
+          const club = clubs.find((c) => c.id === o.clubId);
+          const boekUrl = (d.boeken && d.boeken.url) || (club ? P.boekLink(club, o.datum, o.tijd, o.duur) : '');
+          if (tab && boekUrl) tab.location.href = boekUrl;
+          else if (tab) tab.close();
+          else if (boekUrl) window.open(boekUrl, '_blank', 'noopener');
           await laadPartijen();
           toonPartijen();
           meld('partijen-info', d.tekst, 'ok');
           const kaart = d.id && $('partij-' + d.id);
           if (kaart) kaart.scrollIntoView({ behavior: 'smooth', block: 'start' });
           laadOpenPartijen();
-        } catch (err) { melding.textContent = err.message; melding.className = 'melding fout'; k.disabled = false; }
+        } catch (err) { if (tab) tab.close(); melding.textContent = err.message; melding.className = 'melding fout'; k.disabled = false; }
       });
       return h('div', { class: 'moment st-mee' },
         h('h3', {}, dagLabel(o.datum) + ', ' + o.tijd + '–' + eindTijd(o.tijd, o.duur) + ' · ' + o.club, h('span', { class: 'badge' }, 'baan vrij · 3 van 4')),
