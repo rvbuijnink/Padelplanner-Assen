@@ -17,7 +17,7 @@
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { getUser, verifyRequestOrigin, AuthError, admin } from "@netlify/identity";
 import { db } from "../../db/index.js";
-import { beantwoord, markeerGeboekt, meldBetaallink, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, openPartijenVoor, speelMeeEnBoek, type Keuze } from "../../lib/automatisch.js";
+import { beantwoord, markeerGeboekt, meldBetaallink, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, openPartijenVoor, speelMeeEnBoek, beheerKandidaten, beheerToevoegen, beheerVerwijderen, type Keuze } from "../../lib/automatisch.js";
 import { leesTelefoon, slaTelefoonOp, zichtbareTelefoons, waLink, toonNummer } from "../../lib/telefoon.js";
 // @ts-ignore - gedeelde planner-logica (CommonJS)
 import Planner from "../../src/planner.cjs";
@@ -302,6 +302,13 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
     return r.ok ? json({ ok: true, tekst: r.tekst }) : fout(r.fout, r.status);
   } else if (actie === "kandidaten") {
     return json({ kandidaten: await kandidatenVoor(id) });
+  } else if (actie === "beheerkandidaten" || actie === "beheertoevoegen" || actie === "beheerverwijderen") {
+    if (!beheer) return fout("Alleen de beheerder kan spelers toevoegen of eruit halen.", 403);
+    if (actie === "beheerkandidaten") return json({ kandidaten: await beheerKandidaten(id) });
+    const spelerId = Number(b.spelerId);
+    if (!Number.isInteger(spelerId)) return fout("Onbekende speler.");
+    const r = actie === "beheertoevoegen" ? await beheerToevoegen(id, spelerId) : await beheerVerwijderen(id, spelerId);
+    return r.ok ? json({ ok: true, tekst: r.tekst }) : fout(r.fout, r.status);
   } else if (actie === "verwijderen") {
     if (p.aangemaaktDoor !== mij.id && !beheer) return fout("Alleen wie de partij heeft gepland (of de beheerder) kan deze verwijderen.", 403);
     await db.delete(partijen).where(eq(partijen.id, id));
@@ -506,7 +513,7 @@ export default async (req: Request) => {
       return r.ok ? json({ ok: true, tekst: r.tekst, id: r.id, boeken: r.boeken }) : fout(r.fout, r.status);
     }
     if (pad === "/api/account" && req.method === "DELETE") { verifyRequestOrigin(req); return await verwijderAccount(user); }
-    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|betaald|nietbetaald|keuze|voorstel|kandidaten)$/.exec(pad);
+    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|betaald|nietbetaald|keuze|voorstel|kandidaten|beheerkandidaten|beheertoevoegen|beheerverwijderen)$/.exec(pad);
     if (m && req.method === "POST") return await wijzigPartij(user, m[1], await leesBody(req), isBeheer(req));
     return fout("Niet gevonden.", 404);
   } catch (e) {
