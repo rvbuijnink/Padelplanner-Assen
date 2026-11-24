@@ -8,6 +8,8 @@
 // POST /api/partijen/aanmelden | /afmelden | /verwijderen | /geboekt | /nietgeboekt  { id } (ingelogd)
 // POST /api/partijen/geboekt { id, link? } -> baan geboekt; de anderen krijgen een mail (met Tikkie als die er is)
 // POST /api/partijen/betaallink { id, link }  -> wie boekt deelt (later) een Tikkie; de anderen krijgen die per mail
+// POST /api/partijen/deurcode { id, code }    -> wie boekt deelt (later) de deurcode (Valley, Rolde); de anderen krijgen die per mail
+// Bij /geboekt kan ook { code } mee: de deurcode gaat dan mee in dezelfde mail als de Tikkie en de bevestiging.
 // POST /api/partijen/betaald | /nietbetaald { id, spelerId } -> bijhouden wie zijn deel heeft betaald
 // GET  /api/antwoord?t=...   -> gegevens van een uitnodiging uit de e-mail (geen inlog nodig, de sleutel is genoeg)
 // POST /api/antwoord         { t, a: "ja" | "nee" } -> uitnodiging beantwoorden
@@ -18,7 +20,7 @@
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { getUser, verifyRequestOrigin, AuthError, admin } from "@netlify/identity";
 import { db } from "../../db/index.js";
-import { beantwoord, markeerGeboekt, meldBetaallink, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, openPartijenVoor, speelMeeEnBoek, beheerKandidaten, beheerToevoegen, beheerGastToevoegen, beheerVerwijderen, partijenMetGat, type Keuze } from "../../lib/automatisch.js";
+import { beantwoord, markeerGeboekt, meldBetaallink, meldDeurcode, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, openPartijenVoor, speelMeeEnBoek, beheerKandidaten, beheerToevoegen, beheerGastToevoegen, beheerVerwijderen, partijenMetGat, type Keuze } from "../../lib/automatisch.js";
 import { leesTelefoon, slaTelefoonOp, zichtbareTelefoons, waLink, toonNummer } from "../../lib/telefoon.js";
 import { verstuurTestmail } from "../../lib/mail.js";
 // @ts-ignore - gedeelde planner-logica (CommonJS)
@@ -246,6 +248,8 @@ async function allePartijen(user: Gebruiker, beheer: boolean) {
       boekerIkke: !!mij && p.boekerId === mij.id,
       geboekt: p.geboekt,
       betaallink: p.betaallink,
+      // Deurcode alleen voor wie meedoet (bevestigd), wie boekt en de beheerder.
+      deurcode: beheer || (!!mij && p.boekerId === mij.id) || mijnRij?.status === "bevestigd" ? p.deurcode : null,
       deelnemers: vier.map(toon),
       reserves: actief.slice(MAX_SPELERS).map(toon),
     };
@@ -263,6 +267,14 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
   if (actie === "aanmelden" || actie === "afmelden") {
     const r = await beantwoord(id, mij.id, actie === "aanmelden");
     return r.ok ? json({ ok: true, tekst: r.tekst, boeken: r.boeken, betaallink: r.betaallink, bedrag: r.bedrag }) : fout(r.fout, r.status);
+  } else if (actie === "deurcode") {
+    if (p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de beheerder) kan de deurcode aanpassen.", 403);
+    const code = typeof b.code === "string" ? b.code.trim() : "";
+    if (code.length > 60) return fout("Deze deurcode is te lang.");
+    if ((code || null) === p.deurcode) return json({ ok: true, tekst: code ? "Deze deurcode stond er al." : "Er stond geen deurcode." });
+    await db.update(partijen).set({ deurcode: code || null }).where(eq(partijen.id, id));
+    if (code && p.geboekt) await meldDeurcode(id);
+    return json({ ok: true, tekst: !code ? "De deurcode is weggehaald." : p.geboekt ? "De deurcode is gedeeld. De andere spelers krijgen hem per mail." : "De deurcode is opgeslagen." });
   } else if (actie === "geboekt" || actie === "nietgeboekt" || actie === "betaallink") {
     if (p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de beheerder) kan dit aanpassen.", 403);
     if (actie === "nietgeboekt") {
@@ -278,15 +290,20 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
       if (!url || url.protocol !== "https:" || link.length > 500) return fout("Plak een geldige betaallink (die begint met https://), of laat het veld leeg.");
     }
     const nieuweLink = !!link && link !== p.betaallink;
-    const set: { geboekt?: boolean; betaallink?: string | null } = {};
+    const code = typeof b.code === "string" ? b.code.trim() : "";
+    if (code.length > 60) return fout("Deze deurcode is te lang.");
+    const set: { geboekt?: boolean; betaallink?: string | null; deurcode?: string } = {};
     if (heeftLink && (link || actie === "betaallink")) set.betaallink = link || null;
+    if (actie === "geboekt" && code) set.deurcode = code;
     if (actie === "geboekt") set.geboekt = true;
     if (Object.keys(set).length) await db.update(partijen).set(set).where(eq(partijen.id, id));
     if (actie === "geboekt" && !p.geboekt) {
       await markeerGeboekt(id);
-      return json({ ok: true, tekst: "De baan staat op geboekt. De andere spelers krijgen nu hun uitnodiging" + (link ? ", en wie bevestigt ziet meteen je Tikkie." : ". Zet er nog een Tikkie bij, dan kan wie bevestigt meteen betalen.") });
+      const extra = [link ? "je Tikkie" : "", code ? "de deurcode" : ""].filter(Boolean).join(" en ");
+      return json({ ok: true, tekst: "De baan staat op geboekt. De andere spelers krijgen nu hun uitnodiging" + (extra ? `, met ${extra} erbij.` : ". Zet er nog een Tikkie bij, dan kan wie bevestigt meteen betalen.") });
     }
     if (nieuweLink) await meldBetaallink(id);
+    if (actie === "geboekt" && code && code !== p.deurcode) await meldDeurcode(id);
     return json({ ok: true, tekst: actie === "geboekt" ? "De baan stond al op geboekt." : !link ? "De betaallink is weggehaald." : nieuweLink ? "De betaallink is gedeeld. De andere spelers krijgen hem per mail." : "De betaallink stond er al." });
   } else if (actie === "betaald" || actie === "nietbetaald") {
     const spelerId = Number(b.spelerId);
@@ -300,7 +317,7 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
     if (!r.length) return fout("Deze speler hoort niet bij deze partij.", 404);
   } else if (actie === "keuze") {
     const keuze = b.keuze as Keuze;
-    if (!["nietboeken", "zoeken", "annuleren", "drie", "overnemen"].includes(keuze)) return fout("Onbekende keuze.");
+    if (!["nietboeken", "bezet", "zoeken", "annuleren", "drie", "overnemen"].includes(keuze)) return fout("Onbekende keuze.");
     const r = await boekerKeuze(id, mij.id, keuze, beheer);
     return r.ok ? json({ ok: true, tekst: r.tekst }) : fout(r.fout, r.status);
   } else if (actie === "voorstel") {
@@ -535,7 +552,7 @@ export default async (req: Request) => {
       return r.ok ? json({ ok: true, tekst: `Testmail verstuurd naar ${user.email} via ${r.manier}. Kijk ook even in je spam.` }) : fout(r.fout, 502);
     }
     if (pad === "/api/account" && req.method === "DELETE") { verifyRequestOrigin(req); return await verwijderAccount(user); }
-    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|betaald|nietbetaald|keuze|voorstel|kandidaten|beheerkandidaten|beheertoevoegen|beheerverwijderen|beheergast)$/.exec(pad);
+    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|deurcode|betaald|nietbetaald|keuze|voorstel|kandidaten|beheerkandidaten|beheertoevoegen|beheerverwijderen|beheergast)$/.exec(pad);
     if (m && req.method === "POST") return await wijzigPartij(user, m[1], await leesBody(req), isBeheer(req));
     return fout("Niet gevonden.", 404);
   } catch (e) {

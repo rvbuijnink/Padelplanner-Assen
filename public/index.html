@@ -213,6 +213,7 @@
   a.knop.rustig:hover { background:var(--accent-zacht); }
   .betaalvak { margin-top:6px; }
   .betaalvak input[type=text] { flex:1 1 220px; max-width:none; }
+  .betaalvak input[aria-label=Deurcode] { flex:0 1 150px; }
   .boekrij { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:6px; }
   .clubkaart { border:1px solid var(--lijn); border-radius:12px; padding:16px; margin-bottom:12px; background:var(--veld); }
   .clubkaart h3 { margin:0 0 10px; font-size:1.05rem; }
@@ -510,7 +511,7 @@
         <div class="uitleg" style="margin:0">
         <ol class="stappen">
           <li><span class="nr">1.</span><div><strong>Plannen.</strong> Elk uur tussen 08:00 en 17:00 zoekt de site vier spelers die passen bij elkaars beschikbaarheid en instellingen. De site kijkt daarbij 7 tot 31 dagen vooruit bij de vijf clubs in en rondom Assen. Geen vrije baan? Dan geen partij.</div></li>
-          <li><span class="nr">2.</span><div><strong>Boeken.</strong> Bij instellingen geef je aan of jij wil boeken. Eén van de spelers die een partij wil boeken, krijgt een mail dat er een partij gepland kan worden en heeft 4 uur om de boeking te voltooien, anders wordt de volgende speler benaderd. Zijn er geen spelers meer die willen boeken, dan gaat de partij niet door. Je kunt na het boeken een Tikkie zetten bij de geplande partij.</div></li>
+          <li><span class="nr">2.</span><div><strong>Boeken.</strong> Bij instellingen geef je aan of jij wil boeken. Eén van de spelers die een partij wil boeken, krijgt een mail dat er een partij gepland kan worden en heeft 4 uur om de boeking te voltooien, anders wordt de volgende speler benaderd. Zijn er geen spelers meer die willen boeken, dan gaat de partij niet door. Je kunt na het boeken een Tikkie zetten bij de geplande partij. Bij Valley Padel en Padel Rolde vul je ook de deurcode van de baan in; de anderen krijgen de bevestiging, de Tikkie en de deurcode in één mail. Blijkt de baan bij de club al bezet, druk dan op "De baan is al bezet": de partij wordt geannuleerd en de andere spelers krijgen een mail.</div></li>
           <li><span class="nr">3.</span><div><strong>Bevestigen.</strong> De andere 3 spelers krijgen een uitnodiging en 12 uur tijd om te bevestigen dat ze meespelen. (De klok staat stil van 22:00 tot 08:00). De spelers kunnen de Tikkie betalen. Wie niet op tijd reageert, wordt vervangen.</div></li>
           <li><span class="nr">4.</span><div><strong>Partij vindt plaats.</strong> Alle vier bevestigd? De partij gaat door en iedereen krijgt een mail. Op de dag zelf volgt een herinnering. De 06-nummers van bevestigde medespelers staan bij de geplande partij op de website tot de partij voorbij is. De 06 nummers worden niet in de mail gedeeld.</div></li>
           <li><span class="nr">5.</span><div><strong>Afzeggen.</strong> Kun je niet meer? Klik op de website bij je partij op 'Ik kan niet meer'. Tot 72 uur vooraf zoekt de site een vervanger, daarna beslist de boeker of de partij doorgaat. Binnen 48 uur is de baan vaak niet meer kosteloos te annuleren; zeg je binnen 48 uur af, dan moet je zelf een vervanger zoeken. Neem zo snel mogelijk via WhatsApp contact op om je medespelers te vragen of zij een vervanger weten.</div></li>
@@ -1173,12 +1174,21 @@
         if (p.boekerIkke || isBeheerder) {
           const tikkie = h('input', { type: 'text', inputmode: 'url', placeholder: 'https://tikkie.me/pay/…', 'aria-label': 'Tikkie-link' });
           tikkie.value = p.betaallink || '';
+          // Valley Padel en Padel Rolde: de deur van de baan gaat open met een code. Die gaat mee in de mail.
+          const metCode = !!(club && club.deurcode);
+          const code = metCode ? h('input', { type: 'text', placeholder: 'Deurcode', 'aria-label': 'Deurcode', maxlength: '60', autocomplete: 'off' }) : null;
+          if (code) code.value = p.deurcode || '';
           blokken.push(h('div', { class: 'betaalvak' },
             h('div', {}, h('strong', {}, p.boekerIkke ? 'Jij boekt de baan' : p.boeker + ' boekt de baan'), p.boekenTot ? ' vóór ' : '', p.boekenTot ? h('span', { class: 'klok' }, klok(p.boekenTot)) : null, '. Bedrag: ' + bedragTekst + '.'),
-            h('div', { class: 'hint' }, 'Boek de baan, maak een Tikkie voor het bedrag per persoon en plak de link hier. Na "Baan is geboekt" krijgen de anderen hun uitnodiging.'),
+            h('div', { class: 'hint' }, metCode
+              ? 'Boek de baan, maak een Tikkie voor het bedrag per persoon en plak de link hier. Vul ook de deurcode in die je van ' + club.naam + ' krijgt. Na "Baan is geboekt" krijgen de anderen één mail met de bevestiging, de Tikkie en de deurcode.'
+              : 'Boek de baan, maak een Tikkie voor het bedrag per persoon en plak de link hier. Na "Baan is geboekt" krijgen de anderen hun uitnodiging, met de Tikkie erbij.'),
             h('div', { class: 'boekrij' }, club ? h('a', { class: 'knop', href: P.boekLink(club, p.datum, p.tijd, p.duur), target: '_blank', rel: 'noopener' }, 'Boek bij ' + club.naam + ' ↗') : null),
-            h('div', { class: 'boekrij' }, tikkie, knop('Baan is geboekt', '', () => doe('/geboekt', { link: tikkie.value }))),
-            p.boekerIkke ? h('div', { class: 'boekrij' }, knop('Ik kan niet boeken', 'link', () => { if (confirm('Dan vraagt de site de volgende speler die wil boeken. Je blijft gewoon meespelen.')) doe('/keuze', { keuze: 'nietboeken' }); })) : null));
+            code ? h('div', { class: 'boekrij' }, tikkie, code, knop('Baan is geboekt', '', () => doe('/geboekt', { link: tikkie.value, code: code.value })))
+              : h('div', { class: 'boekrij' }, tikkie, knop('Baan is geboekt', '', () => doe('/geboekt', { link: tikkie.value }))),
+            h('div', { class: 'boekrij' },
+              knop('De baan is al bezet', 'link', () => { if (confirm('Is de baan bij ' + (club ? club.naam : 'de club') + ' al bezet, zodat boeken niet lukt? Dan wordt de partij geannuleerd en krijgen de andere spelers een mail.')) doe('/keuze', { keuze: 'bezet' }); }),
+              p.boekerIkke ? knop('Ik kan niet boeken', 'link', () => { if (confirm('Dan vraagt de site de volgende speler die wil boeken. Je blijft gewoon meespelen.')) doe('/keuze', { keuze: 'nietboeken' }); }) : null)));
         } else if (p.doeIkMee) {
           blokken.push(h('div', { class: 'hint' }, p.boeker + ' boekt eerst de baan. Daarna krijg je een uitnodiging per e-mail.'));
         }
@@ -1209,9 +1219,18 @@
         const veld = h('input', { type: 'text', inputmode: 'url', placeholder: 'https://tikkie.me/pay/…', 'aria-label': 'Tikkie-link' });
         veld.value = p.betaallink || '';
         blokken.push(h('div', { class: 'betaalvak' }, h('div', {}, (p.boekerIkke ? 'Jij hebt de baan geboekt.' : p.boeker + ' heeft de baan geboekt.') + ' Bedrag: ' + bedragTekst + '.'),
-          h('div', { class: 'boekrij' }, veld, knop(p.betaallink ? 'Tikkie wijzigen' : 'Deel Tikkie', '', () => doe('/betaallink', { link: veld.value })))));
+          h('div', { class: 'boekrij' }, veld, knop(p.betaallink ? 'Tikkie wijzigen' : 'Deel Tikkie', '', () => doe('/betaallink', { link: veld.value }))),
+          club && club.deurcode ? (() => {
+            const code = h('input', { type: 'text', placeholder: 'Deurcode', 'aria-label': 'Deurcode', maxlength: '60', autocomplete: 'off' });
+            code.value = p.deurcode || '';
+            return h('div', { class: 'boekrij' }, code, knop(p.deurcode ? 'Deurcode wijzigen' : 'Deel deurcode', '', () => doe('/deurcode', { code: code.value })));
+          })() : null));
       } else if (p.geboekt && p.boeker) {
         blokken.push(h('div', {}, p.boeker + ' heeft de baan geboekt. Bedrag: ' + bedragTekst + '.'));
+      }
+      // Deurcode voor wie meedoet.
+      if (p.geboekt && p.mijnStatus === 'bevestigd' && !p.boekerIkke && club && club.deurcode) {
+        blokken.push(h('div', {}, p.deurcode ? ['🔑 Deurcode van de baan: ', h('strong', {}, p.deurcode)] : h('span', { class: 'hint' }, '🔑 De deurcode volgt nog van ' + (p.boeker || 'de boeker') + '.')));
       }
 
       // De boeker zegt af: overnemen.
