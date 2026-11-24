@@ -201,8 +201,9 @@ async function allePartijen(user: Gebruiker, beheer: boolean) {
   const lijst = beheer
     ? alle.filter((p) => !p.geannuleerd)
     : alle.filter((p) => !p.geannuleerd).filter((p) => !!mij && (p.aangemaaktDoor === mij.id || rijen.some((r) => r.partijId === p.id && r.spelerId === mij.id && isActief(r))));
-  const alleNamen = await db.select({ id: spelers.id, naam: spelers.naam, gast: spelers.gast }).from(spelers);
+  const alleNamen = await db.select({ id: spelers.id, naam: spelers.naam, gast: spelers.gast, niveau: spelers.niveau }).from(spelers);
   const namen = new Map(alleNamen.map((x) => [x.id, x.naam]));
+  const niveaus = new Map(alleNamen.filter((x) => !x.gast).map((x) => [x.id, x.niveau]));
   const gasten = new Set(alleNamen.filter((x) => x.gast).map((x) => x.id));
   // 06-nummers: de database (row level security) bepaalt welke deze speler mag zien.
   const nummers = mij ? await zichtbareTelefoons(mij.id) : new Map<number, string>();
@@ -213,6 +214,7 @@ async function allePartijen(user: Gebruiker, beheer: boolean) {
     const toon = (r: (typeof rijen)[number]) => {
       const nr = r.status === "bevestigd" ? nummers.get(r.spelerId) : undefined;
       return { naam: namen.get(r.spelerId) ?? "?", ik: r.spelerId === mij?.id, status: r.status, boekt: !!p.boekerId && r.spelerId === p.boekerId, id: r.spelerId, betaald: r.betaald, gast: gasten.has(r.spelerId),
+        niveau: niveaus.get(r.spelerId) ?? null,
         ...(nr ? { telefoon: toonNummer(nr), whatsapp: waLink(nr) } : {}),
         ...(r.status === "uitgenodigd" ? { reactieTot: reactieTotVan(r, p) } : {}) };
     };

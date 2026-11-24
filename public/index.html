@@ -133,8 +133,20 @@
   .badge.rood { background:color-mix(in srgb, var(--fout) 14%, transparent); color:var(--fout); }
   .badge.oranje { background:color-mix(in srgb, #e8892b 18%, transparent); color:#b25e0c; }
   @media (prefers-color-scheme: dark) { .badge.oranje { color:#f2a65a; } }
-  ul.spelerlijst { list-style:none; margin:6px 0 4px; padding:0; display:grid; gap:3px; }
-  ul.spelerlijst li { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+  table.spelertabel { width:100%; border-collapse:collapse; font-size:.92rem; margin:8px 0 6px; }
+  table.spelertabel th, table.spelertabel td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--lijn); vertical-align:middle; }
+  table.spelertabel th:nth-child(2), table.spelertabel td:nth-child(2) { text-align:center; width:4.5em; font-variant-numeric:tabular-nums; }
+  table.spelertabel .nummer { margin-left:0; }
+  table.spelertabel tr.sp-open td { color:var(--zacht); font-style:italic; }
+  .sp-label { display:inline-block; margin-left:6px; font-size:.72rem; font-weight:600; padding:1px 8px; border-radius:99px; background:var(--veld); color:var(--zacht); border:1px solid var(--lijn); }
+  @media (max-width:560px) {
+    table.spelertabel thead { display:none; }
+    table.spelertabel tr { display:grid; grid-template-columns:1fr auto; gap:2px 10px; padding:8px 0; border-bottom:1px solid var(--lijn); }
+    table.spelertabel td { border:0; padding:0; width:auto !important; }
+    table.spelertabel td:nth-child(2) { text-align:right; }
+    table.spelertabel td:nth-child(n+3) { grid-column:1 / -1; }
+    table.spelertabel tr.sp-open td { grid-column:1 / -1; }
+  }
   .sp-ok { color:var(--goed); font-weight:600; font-size:.88rem; }
   .sp-wacht { color:var(--fout); font-weight:600; font-size:.88rem; }
   .sp-open { color:var(--zacht); font-style:italic; }
@@ -1086,8 +1098,6 @@
       return false;
     }
   }
-  const naamLijst = (lijst) => lijst.map((d, i) => [i ? ', ' : '', d.ik ? h('strong', {}, d.naam + ' (jij)') : d.naam,
-    d.status === 'uitgenodigd' ? h('span', { class: 'hint' }, ' (uitgenodigd)') : null]);
   const klok = (ms) => new Date(ms).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   const startMs = (p) => P.parseKey(p.datum).getTime() + P.naarMin(p.tijd) * 60000;
   function gratisTekst(p) {
@@ -1244,23 +1254,28 @@
         : p.compleet ? h('span', { class: 'badge' }, '4 van 4 bevestigd · gaat door')
         : drie ? h('span', { class: 'badge' }, 'gaat door met drie')
         : h('span', { class: 'badge rood' }, bevestigd + ' van 4 bevestigd');
-      const spelerRij = (d) => h('li', {}, d.ik ? h('strong', {}, d.naam + ' (jij)') : h('span', {}, d.naam + (d.gast ? ' (gast)' : '')),
-        d.status === 'bevestigd' ? h('span', { class: 'sp-ok' }, ' ✓ bevestigd') : d.status === 'gepland' ? h('span', { class: 'sp-wacht' }, ' · uitnodiging na het boeken') : h('span', { class: 'sp-wacht' }, ' … nog niet bevestigd' + (d.reactieTot ? ' (tot ' + klok(d.reactieTot) + ')' : '')),
-        d.boekt ? h('span', { class: 'hint' }, ' · boeker') : null,
-        d.telefoon && !d.ik ? h('span', { class: 'nummer' }, h('a', { href: 'tel:' + d.telefoon.replace(/-/g, '') }, d.telefoon), h('a', { class: 'wa', href: d.whatsapp, target: '_blank', rel: 'noopener' }, 'Stuur bericht via WhatsApp')) : null,
-        p.geboekt && p.betaallink && !d.boekt && d.status === 'bevestigd' ? betaalStand(d) : null);
+      const statusCel = (d) => d.status === 'bevestigd' ? h('span', { class: 'sp-ok' }, '✓ bevestigd')
+        : d.status === 'gepland' ? h('span', { class: 'sp-wacht' }, 'uitnodiging na het boeken')
+        : h('span', { class: 'sp-wacht' }, 'nog niet bevestigd' + (d.reactieTot ? ' (tot ' + klok(d.reactieTot) + ')' : ''));
+      const metBetaling = p.geboekt && !!p.betaallink;
+      const spelerRij = (d) => h('tr', {},
+        h('td', { 'data-kop': 'Speler' }, d.ik ? h('strong', {}, d.naam + ' (jij)') : d.naam + (d.gast ? ' (gast)' : ''),
+          d.boekt ? h('span', { class: 'sp-label' }, 'boeker') : null),
+        h('td', { 'data-kop': 'Niveau' }, d.niveau ? P.niveauLabel(d.niveau) : h('span', { class: 'hint' }, '–')),
+        h('td', { 'data-kop': 'Status' }, statusCel(d), metBetaling && !d.boekt && d.status === 'bevestigd' ? h('div', {}, betaalStand(d)) : null),
+        h('td', { 'data-kop': 'Contact' }, d.telefoon && !d.ik ? h('span', { class: 'nummer' }, h('a', { href: 'tel:' + d.telefoon.replace(/-/g, '') }, d.telefoon), h('a', { class: 'wa', href: d.whatsapp, target: '_blank', rel: 'noopener' }, 'WhatsApp')) : null));
       function betaalStand(d) {
         const mag = d.ik || p.boekerIkke || isBeheerder;
         const k = mag ? knop(d.betaald ? 'toch niet' : (d.ik ? 'Ik heb betaald' : 'markeer als betaald'), 'link', () => doe(d.betaald ? '/nietbetaald' : '/betaald', { spelerId: d.id })) : null;
-        return h('span', {}, d.betaald ? h('span', { class: 'sp-ok' }, ' · betaald') : h('span', { class: 'sp-wacht' }, ' · nog niet betaald'), k ? ' ' : null, k);
+        return h('span', {}, d.betaald ? h('span', { class: 'sp-ok' }, 'betaald') : h('span', { class: 'sp-wacht' }, 'nog niet betaald'), k ? ' ' : null, k);
       }
       const open = Math.max(0, 4 - p.deelnemers.length);
       const kaart = h('div', { class: 'moment st-' + (stand === 'open' ? 'open-partij' : stand), id: 'partij-' + p.id },
         h('h3', {}, dagLabel(p.datum) + ', ' + p.tijd + '–' + eindTijd(p.tijd, p.duur) + ' · ' + clubNaam(p.clubId), badge),
-        h('div', {}, 'Spelers (' + bevestigd + ' van 4 bevestigd):'),
-        h('ul', { class: 'spelerlijst' }, ...p.deelnemers.map(spelerRij), ...Array.from({ length: open }, () => h('li', { class: 'sp-open' }, 'nog een speler nodig'))),
+        h('table', { class: 'spelertabel' },
+          h('thead', {}, h('tr', {}, h('th', {}, 'Speler'), h('th', {}, 'Niveau'), h('th', {}, 'Status'), h('th', {}, 'Contact'))),
+          h('tbody', {}, ...p.deelnemers.map(spelerRij), ...Array.from({ length: open }, () => h('tr', { class: 'sp-open' }, h('td', { colspan: '4' }, 'nog een speler nodig'))))),
         p.afgemeld && p.afgemeld.length ? h('div', { class: 'hint' }, 'Afgemeld: ' + p.afgemeld.join(', ')) : null,
-        p.reserves.length ? h('div', { class: 'hint' }, 'Reserve: ', naamLijst(p.reserves)) : null,
         p.mijnStatus === 'bevestigd' && !p.deelnemers.some((d) => !d.ik && d.telefoon) && p.deelnemers.length > 1 ? h('div', { class: 'hint' }, 'De 06-nummers van je medespelers verschijnen zodra zij ook hebben bevestigd.') : null,
         ...blokken,
         h('div', { class: 'boekrij' }, knoppen), melding);
