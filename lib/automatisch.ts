@@ -574,6 +574,25 @@ export async function meldDeurcode(partijId: number) {
   await verstuur(mails);
 }
 
+// Gewijzigde Tikkie en/of deurcode na het boeken: één mail met alle gegevens aan wie bevestigd heeft of is uitgenodigd.
+export async function meldGegevens(partijId: number) {
+  const ctx = await laad();
+  const p = ctx.partijen.find((x) => x.id === partijId);
+  if (!p || !p.geboekt || p.geannuleerd || (!p.betaallink && !p.deurcode)) return;
+  const wie = spelerVan(ctx, p.boekerId)?.naam ?? "De boeker";
+  const rijen = spelendVan(p).filter((r) => (r.status === "bevestigd" || r.status === "uitgenodigd") && r.spelerId !== p.boekerId);
+  const mails: Mail[] = [];
+  for (const r of rijen) {
+    const metLink = !!p.betaallink && !r.betaald;
+    mails.push(...bericht(ctx, p, [r.spelerId], `Gegevens van de baan voor ${dagTekst(p.datum)}`, () =>
+      `${wie} heeft de gegevens bij de partij van ${partijTekst(ctx, p)} bijgewerkt.\n` +
+      `Bedrag: ${bedragTekst(ctx, p, p.besluit === "drie" ? 3 : MAX_SPELERS)}\n` + deurcodeTekst(ctx, p) +
+      (metLink ? `\n${r.status === "uitgenodigd" ? "Doe je mee? Betaal dan je deel" : "Betaal je deel"} via de Tikkie: ${p.betaallink}` : p.betaallink ? "\nJe hebt je deel al betaald." : ""),
+      metLink ? [{ label: "Betaal je deel (Tikkie)", url: p.betaallink! }, naarPartij(p.id)] : [naarPartij(p.id)]));
+  }
+  await verstuur(mails);
+}
+
 // ---- Antwoorden op een uitnodiging en afzeggen ----
 export type Antwoord = { ok: true; tekst: string; boeken?: { club: string; url: string }; betaallink?: string | null; bedrag?: number | null } | { ok: false; fout: string; status?: number };
 
