@@ -81,6 +81,8 @@ export const partijen = pgTable("partijen", {
   geboekt: boolean().notNull().default(false),
   // Betaallink (bijv. een Tikkie) die wie boekt deelt met de andere spelers.
   betaallink: text(),
+  // Code voor de deur van de baan (bij Valley Padel en Padel Rolde), door wie boekt ingevuld en per mail gedeeld.
+  deurcode: text(),
   // Of de herinnering op de dag van de partij al is verstuurd.
   dagHerinnerd: boolean("dag_herinnerd").notNull().default(false),
   // Geannuleerd: er konden niet genoeg spelers en er was geen vervanger. De partij blijft bewaard,
@@ -93,6 +95,7 @@ export const partijen = pgTable("partijen", {
   // Spelers die het boeken hebben laten lopen of hebben doorgegeven: die worden niet opnieuw als boeker gevraagd.
   afgewezenBoekers: jsonb("afgewezen_boekers").$type<number[]>().notNull().default([]),
   // Keuze van de boeker als er tussen 72 en 50 uur voor aanvang een speler ontbreekt: "zoeken" of "drie" (doorgaan met drie).
+  // "bezet": de boeker vond de baan bij de club al bezet en de partij is geannuleerd; die baan wordt niet opnieuw voorgesteld.
   besluit: text(),
   // Of de boeker al gevraagd is te kiezen (72 uur) en te beslissen (50 uur).
   keuzeGemeld: boolean("keuze_gemeld").notNull().default(false),

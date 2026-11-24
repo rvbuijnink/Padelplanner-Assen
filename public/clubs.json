@@ -37,7 +37,8 @@
       "annuleren": "48 uur (aangenomen)",
       "annulerenBevestigd": false,
       "opmerkingVast": "9 overdekte banen, 7 dubbel en 2 enkel.",
-      "linkSoort": "racketiq"
+      "linkSoort": "racketiq",
+      "deurcode": true
     },
     {
       "id": "plaza",
@@ -64,10 +65,12 @@
       "annulerenBevestigd": false,
       "laatsteKeus": true,
       "opmerkingVast": "Laatste keus: wordt alleen gekozen als er bij geen andere club een baan vrij is, ook als Rolde goedkoper is.",
-      "linkSoort": "racketiq"
+      "linkSoort": "racketiq",
+      "deurcode": true
     }
   ],
   "padelchecker": "https://www.padelchecker.nl/",
   "_live": "live = true: vrije banen worden live opgehaald via /api/banen (RacketIQ voor Valley en Rolde, Foys voor Peakz, Meet & Play voor Plaza en De Hertenkamp).",
+  "_deurcode": "deurcode = true: bij deze club moet je een code invullen om de deur te openen. Wie boekt vult die in en de andere spelers krijgen hem per mail.",
   "_annuleren": "Gratis annuleren kan bij alle clubs tot 48 uur voor aanvang. Bij Peakz is dat bevestigd, bij de andere drie aangenomen. Annuleren gebeurt altijd bij de club zelf."
 }

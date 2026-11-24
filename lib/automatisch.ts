@@ -276,6 +276,10 @@ const antwoordLinks = (token: string) => [
   { label: "Ik doe mee", url: `${siteUrl()}/bevestig.html?t=${token}&a=ja` },
   { label: "Ik kan niet", url: `${siteUrl()}/bevestig.html?t=${token}&a=nee` },
 ];
+// Deurcode (Valley Padel, Padel Rolde): een regel voor in de mail, of leeg als de club geen code gebruikt.
+const deurcodeTekst = (ctx: Context, p: Partij) =>
+  p.deurcode ? `Deurcode om de deur van de baan te openen: ${p.deurcode}\n`
+    : clubVan(ctx, p.clubId).deurcode ? `De deurcode voor de baan volgt nog van ${spelerVan(ctx, p.boekerId)?.naam ?? "de boeker"}.\n` : "";
 const namenVan = (ctx: Context, rijen: Deelnemer[]) => rijen.map((r) => spelerVan(ctx, r.spelerId)?.naam).filter(Boolean) as string[];
 
 // Baanprijs: de live prijs die bij het plannen bij de club is gevonden.
@@ -325,10 +329,11 @@ function uitnodiging(ctx: Context, p: Partij, s: Speler, rij: Deelnemer, voorges
       `Hoi ${s.naam},\n\n` +
       (voorgesteldDoor ? `${voorgesteldDoor.naam} stelt je voor als vervanger voor een partij.\n\n` : "Volgens je beschikbaarheid kun je op dit moment, dus er is een partij voor je gevonden.\n\n") +
       `Wanneer: ${partijTekst(ctx, p)}\nMet: ${anderen.length ? naamLijst(anderen) : "nog onbekend"}\nBedrag: ${bedragTekst(ctx, p)}\n` +
-      (p.geboekt ? `De baan is al geboekt${boeker ? ` door ${boeker.naam}` : ""}.\n` : "") +
+      (p.geboekt ? `De baan is geboekt${boeker ? ` door ${boeker.naam}` : ""}.\n` + deurcodeTekst(ctx, p) +
+        (p.betaallink ? `Doe je mee? Betaal dan je deel via de Tikkie: ${p.betaallink}\n` : "") : "") +
       `\nReageer vóór ${tot}. Reageer je niet op tijd, dan vragen we iemand anders.` +
       (ctx.metTelefoon.has(s.id) ? "" : `\n\n${geenNummer}`),
-    knoppen: antwoordLinks(rij.token),
+    knoppen: [...antwoordLinks(rij.token), ...(p.geboekt && p.betaallink ? [{ label: "Betaal je deel (Tikkie)", url: p.betaallink }] : [])],
   };
 }
 
@@ -345,7 +350,7 @@ function gaatDoor(ctx: Context, p: Partij, vier: Speler[], boeker?: Speler): Mai
       tekst:
         `Hoi ${s.naam},\n\nAlle vier spelers hebben bevestigd. De partij gaat door!\n\n` +
         `Wanneer: ${partijTekst(ctx, p)}\nSpelers: ${naamLijst(vier.map((x) => x.naam))}\n` +
-        `Boeker: ${boeker ? (ikBoek ? "jij" : boeker.naam) : "nog onbekend"}\nBedrag: ${bedragTekst(ctx, p)}\n\n` +
+        `Boeker: ${boeker ? (ikBoek ? "jij" : boeker.naam) : "nog onbekend"}\nBedrag: ${bedragTekst(ctx, p)}\n` + deurcodeTekst(ctx, p) + "\n" +
         (ikBoek ? (p.betaallink ? "Je Tikkie staat bij de partij." : "Zet nog een Tikkie bij de partij, dan kunnen de anderen betalen.")
           : tikkie ? `Betaal je deel via de Tikkie: ${p.betaallink}` : p.betaallink ? "Je hebt je deel al betaald." : `Er staat nog geen Tikkie bij de partij; die komt van ${boeker?.naam ?? "de boeker"}.`) +
         "\n\nDe 06-nummers van je medespelers staan op de partijpagina (niet in deze mail). Kun je toch niet? Klik daar op \"Ik kan niet meer\".",
@@ -397,13 +402,13 @@ async function wijsBoekerAan(ctx: Context, p: Partij, mails: Mail[]) {
 }
 
 // De partij gaat niet door. Wie nog meedeed krijgt een mail (wie nog niet was uitgenodigd niet) en kan die dag opnieuw worden ingepland.
-async function annuleer(ctx: Context, p: Partij, mails: Mail[], reden: string) {
+async function annuleer(ctx: Context, p: Partij, mails: Mail[], reden: string, iedereen = false) {
   const gelukt = await db.update(partijen).set({ geannuleerd: true, compleetGemeld: false })
     .where(and(eq(partijen.id, p.id), eq(partijen.geannuleerd, false))).returning({ id: partijen.id });
   p.geannuleerd = true;
   if (!gelukt.length) return;
   const actief = spelendVan(p);
-  const gemaild = actief.filter((r) => r.status !== "gepland" || r.spelerId === p.boekerId).map((r) => r.spelerId);
+  const gemaild = actief.filter((r) => iedereen || r.status !== "gepland" || r.spelerId === p.boekerId).map((r) => r.spelerId);
   if (actief.length) {
     await db.update(partijDeelnemers).set({ status: "geannuleerd" })
       .where(and(eq(partijDeelnemers.partijId, p.id), inArray(partijDeelnemers.status, ["gepland", "uitgenodigd", "bevestigd"])));
@@ -534,7 +539,7 @@ export async function markeerGeboekt(partijId: number) {
     mails.push({
       aan: s.email!, naam: s.naam,
       onderwerp: `De baan is geboekt: padel op ${dagTekst(p.datum)}`,
-      tekst: `Hoi ${s.naam},\n\n${wie} heeft de baan geboekt voor de partij van ${partijTekst(ctx, p)}.\nBedrag: ${bedragTekst(ctx, p)}\n\n` +
+      tekst: `Hoi ${s.naam},\n\n${wie} heeft de baan geboekt voor de partij van ${partijTekst(ctx, p)}.\nBedrag: ${bedragTekst(ctx, p)}\n` + deurcodeTekst(ctx, p) + "\n" +
         (metLink ? "Betaal je deel via de Tikkie hieronder." : `Er staat (nog) geen Tikkie bij de partij. Spreek met ${wie} af hoe je betaalt.`),
       knoppen: metLink ? [{ label: "Betaal je deel (Tikkie)", url: p.betaallink! }, naarPartij(p.id)] : [naarPartij(p.id)],
     });
@@ -555,6 +560,17 @@ export async function meldBetaallink(partijId: number) {
       `${spelerVan(ctx, p.boekerId)?.naam ?? "De boeker"} heeft een Tikkie bij de partij van ${partijTekst(ctx, p)} gezet.\nBedrag: ${bedragTekst(ctx, p, p.besluit === "drie" ? 3 : MAX_SPELERS)}`,
       [{ label: "Betaal je deel (Tikkie)", url: p.betaallink! }, naarPartij(p.id)]));
   }
+  await verstuur(mails);
+}
+
+// Later (of een nieuwe) deurcode: wie bevestigd heeft of is uitgenodigd krijgt hem per mail.
+export async function meldDeurcode(partijId: number) {
+  const ctx = await laad();
+  const p = ctx.partijen.find((x) => x.id === partijId);
+  if (!p || !p.deurcode || !p.geboekt || p.geannuleerd) return;
+  const ids = spelendVan(p).filter((r) => (r.status === "bevestigd" || r.status === "uitgenodigd") && r.spelerId !== p.boekerId).map((r) => r.spelerId);
+  const mails = bericht(ctx, p, ids, `Deurcode voor de baan op ${dagTekst(p.datum)}`, () =>
+    `${spelerVan(ctx, p.boekerId)?.naam ?? "De boeker"} heeft de deurcode bij de partij van ${partijTekst(ctx, p)} gezet.\n\n` + deurcodeTekst(ctx, p));
   await verstuur(mails);
 }
 
@@ -640,7 +656,7 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
 }
 
 // ---- Keuzes van de boeker ----
-export type Keuze = "nietboeken" | "zoeken" | "annuleren" | "drie" | "overnemen";
+export type Keuze = "nietboeken" | "bezet" | "zoeken" | "annuleren" | "drie" | "overnemen";
 export async function boekerKeuze(partijId: number, spelerId: number, keuze: Keuze, beheer = false): Promise<Antwoord> {
   const ctx = await laad();
   const p = ctx.partijen.find((x) => x.id === partijId);
@@ -654,6 +670,13 @@ export async function boekerKeuze(partijId: number, spelerId: number, keuze: Keu
     await zetPartij(p, { afgewezenBoekers: [...(p.afgewezenBoekers ?? []), spelerId] });
     if (!(await wijsBoekerAan(ctx, p, mails))) await annuleer(ctx, p, mails, "Er was niemand die de baan kon boeken.");
     tekst = p.geannuleerd ? "Er is niemand anders die wil boeken, dus de partij gaat niet door." : `${spelerVan(ctx, p.boekerId)?.naam} is gevraagd de baan te boeken. Jij speelt gewoon mee.`;
+  } else if (keuze === "bezet") {
+    // De baan bleek bij de club al bezet: boeken lukt niet, dus de partij gaat niet door. Alle spelers krijgen een mail.
+    if (p.geboekt) return { ok: false, fout: "De baan staat al op geboekt. Kies dan \"Partij annuleren\".", status: 409 };
+    const club = clubVan(ctx, p.clubId);
+    await zetPartij(p, { besluit: "bezet" });
+    await annuleer(ctx, p, mails, `${beheer && p.boekerId !== spelerId ? "De beheerder meldt" : `${boeker?.naam ?? "De boeker"} meldt`} dat de baan bij ${club.naam} al bezet was, dus boeken lukte niet.`, true);
+    tekst = "De partij is geannuleerd. De andere spelers krijgen een mail dat de baan al bezet was.";
   } else if (keuze === "zoeken") {
     await zetPartij(p, { besluit: "zoeken" });
     mails.push(...bericht(ctx, p, bevestigdVan(p).map((r) => r.spelerId).filter((id) => id !== p.boekerId), `We zoeken een vervanger (${dagTekst(p.datum)})`, () =>
@@ -794,6 +817,10 @@ export async function beheerVerwijderen(partijId: number, spelerId: number): Pro
 
 // ---- Nieuwe partijen zoeken ----
 // Per club de goedkoopste vrije baan; daarna de goedkoopste club (laatste-keusclubs zoals Rolde achteraan), bij gelijke prijs de club waar het langst geleden een partij was.
+// Een baan die de boeker bij de club al bezet vond (keuze "bezet") wordt niet opnieuw voorgesteld, ook al toont de koppeling hem als vrij.
+const alsBezetGemeld = (ctx: Context, datum: string, clubId: string, tijd: string, duur: number) =>
+  ctx.partijen.some((q) => q.besluit === "bezet" && q.datum === datum && q.clubId === clubId &&
+    naarMin(q.tijd) < naarMin(tijd) + duur && naarMin(tijd) < naarMin(q.tijd) + q.duur);
 async function liveKeuze(ctx: Context, datum: string, slot: any, duur: number, opties: any[]) {
   try {
     const r = await fetch(`${siteUrl()}/api/banen?datum=${datum}&slot=${slot.id}`, { signal: AbortSignal.timeout(8000) });
@@ -806,6 +833,7 @@ async function liveKeuze(ctx: Context, datum: string, slot: any, duur: number, o
       if (!c?.live || !c.boekbaar) continue;
       for (const st of c.starts ?? []) {
         if (naarMin(st.tijd) + duur > eind) continue;
+        if (alsBezetGemeld(ctx, datum, o.club.id, st.tijd, duur)) continue;
         const prijzen = (st.banen ?? []).map((b: any) => b.prijzen?.[String(duur)]).filter((x: any) => x != null);
         if (!prijzen.length) continue;
         perClub.push({ clubId: o.club.id, tijd: st.tijd, prijs: Math.min(...prijzen) });
@@ -1149,7 +1177,7 @@ async function dagHerinneringen(ctx: Context, mails: Mail[]) {
         onderwerp: `Vandaag padel om ${p.tijd} bij ${club.naam}`,
         tekst:
           `Hoi ${s.naam},\n\nVandaag is het zover!\n\nWanneer: ${partijTekst(ctx, p)}\nSpelers: ${naamLijst(namen)}\n` +
-          (boeker ? `Baan geboekt door: ${ikBoek ? "jou" : boeker.naam}\n` : "") +
+          (boeker ? `Baan geboekt door: ${ikBoek ? "jou" : boeker.naam}\n` : "") + deurcodeTekst(ctx, p) +
           (tikkie ? `\nJe deel staat nog open (${bedragTekst(ctx, p, p.besluit === "drie" ? 3 : MAX_SPELERS)}). Betaal via de Tikkie hieronder.\n` : "") +
           "\nDe 06-nummers van je medespelers staan op de partijpagina. Veel plezier!",
         knoppen: [...(tikkie ? [{ label: "Betaal je deel (Tikkie)", url: p.betaallink! }] : []), naarPartij(p.id)],
