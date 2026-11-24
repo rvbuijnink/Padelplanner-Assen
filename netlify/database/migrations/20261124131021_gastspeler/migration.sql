@@ -1,0 +1,1 @@
+ALTER TABLE "spelers" ADD COLUMN "gast" boolean DEFAULT false NOT NULL;

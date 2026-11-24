@@ -8,6 +8,9 @@ export const spelers = pgTable("spelers", {
   // gekoppeld zodra iemand met dezelfde naam inlogt en zijn instellingen opslaat.
   userId: text("user_id").unique(),
   naam: text().notNull(),
+  // Gastspeler: alleen een naam, door de beheerder aan een partij toegevoegd. Geen account, e-mail, 06-nummer
+  // of speelsterkte; wordt nooit automatisch ingepland of als boeker gekozen.
+  gast: boolean().notNull().default(false),
   niveau: text().notNull(),
   wensNiveaus: jsonb("wens_niveaus").$type<string[]>().notNull(),
   duren: jsonb().$type<string[]>().notNull(),

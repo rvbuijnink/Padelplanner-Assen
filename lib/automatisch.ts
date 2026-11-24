@@ -189,7 +189,8 @@ const clubJa = (s: Speler, clubId: string, datum: string) => P.voorkeurVan(s, cl
 function pastBij(ctx: Context, s: Speler, p: { id?: number; datum: string; tijd: string; duur: number; clubId: string }, groep: Speler[], niv: (a: Speler, b: Speler) => boolean = nivPast) {
   if (!clubJa(s, p.clubId, p.datum)) return false;
   if (!kanOp(s, p.datum, p.tijd, p.duur)) return false;
-  if (!groep.every((g) => niv(s, g))) return false;
+  // Een gastspeler heeft geen speelsterkte: die telt niet mee bij het niveau van de groep.
+  if (!groep.every((g) => g.gast || niv(s, g))) return false;
   if (!heeftRuimte(ctx, s, p.datum, p.id)) return false;
   if (speeltAlOpDag(ctx, s.id, p.datum, p.id)) return false;
   if (teDichtBij(ctx, s, p.datum, p.id)) return false;
@@ -713,7 +714,7 @@ export async function beheerKandidaten(partijId: number) {
   if (!p) return [];
   return ctx.spelers
     .filter((s) => !p.rijen.some((r) => r.spelerId === s.id && isActief(r)))
-    .map((s) => ({ id: s.id, naam: s.naam, afgezegd: p.rijen.some((r) => r.spelerId === s.id && r.status === "afgezegd"), alOpDag: speeltAlOpDag(ctx, s.id, p.datum, p.id) }))
+    .map((s) => ({ id: s.id, naam: s.naam, gast: s.gast, afgezegd: p.rijen.some((r) => r.spelerId === s.id && r.status === "afgezegd"), alOpDag: speeltAlOpDag(ctx, s.id, p.datum, p.id) }))
     .sort((a, b) => a.naam.localeCompare(b.naam));
 }
 export async function beheerToevoegen(partijId: number, spelerId: number): Promise<Antwoord> {
@@ -731,6 +732,24 @@ export async function beheerToevoegen(partijId: number, spelerId: number): Promi
   const rijen = await db.select().from(partijDeelnemers).where(eq(partijDeelnemers.partijId, p.id));
   const reserve = !vierVan({ ...p, rijen }).some((r) => r.spelerId === s.id);
   return { ok: true, tekst: `${s.naam} is als bevestigd aan de partij toegevoegd (zonder e-mail).` + (reserve ? " De partij was al vol, dus deze speler staat op de reservelijst." : "") + (speeltAlOpDag(ctx, s.id, p.datum, p.id) ? ` Let op: ${s.naam} staat die dag ook bij een andere partij.` : "") };
+}
+// Gastspeler: alleen een naam. Bestaat er al een gast met die naam, dan wordt die opnieuw gebruikt.
+export async function beheerGastToevoegen(partijId: number, naam: string): Promise<Antwoord> {
+  const schoon = naam.replace(/\s+/g, " ").trim().slice(0, 60);
+  if (!schoon) return { ok: false, fout: "Vul de naam van de gastspeler in.", status: 400 };
+  const ctx = await laad();
+  const p = ctx.partijen.find((x) => x.id === partijId);
+  if (!p || p.geannuleerd || startVan(p) < Date.now()) return { ok: false, fout: "Deze partij bestaat niet (meer).", status: 404 };
+  let gast = ctx.spelers.find((s) => s.gast && s.naam.toLowerCase() === schoon.toLowerCase());
+  if (!gast) {
+    const [nieuw] = await db
+      .insert(spelers)
+      .values({ slug: "gast-" + randomBytes(9).toString("base64url"), gast: true, naam: schoon, niveau: "", wensNiveaus: [], duren: [], frequentie: "", mailAan: false, herinneringAan: false, boekBereid: false })
+      .returning({ id: spelers.id });
+    gast = { id: nieuw.id, naam: schoon } as Speler;
+  }
+  const r = await beheerToevoegen(p.id, gast.id);
+  return r.ok ? { ...r, tekst: "Gastspeler " + r.tekst } : r;
 }
 export async function beheerVerwijderen(partijId: number, spelerId: number): Promise<Antwoord> {
   const ctx = await laad();

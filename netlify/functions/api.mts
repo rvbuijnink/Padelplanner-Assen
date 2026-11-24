@@ -17,7 +17,7 @@
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { getUser, verifyRequestOrigin, AuthError, admin } from "@netlify/identity";
 import { db } from "../../db/index.js";
-import { beantwoord, markeerGeboekt, meldBetaallink, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, openPartijenVoor, speelMeeEnBoek, beheerKandidaten, beheerToevoegen, beheerVerwijderen, type Keuze } from "../../lib/automatisch.js";
+import { beantwoord, markeerGeboekt, meldBetaallink, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, openPartijenVoor, speelMeeEnBoek, beheerKandidaten, beheerToevoegen, beheerGastToevoegen, beheerVerwijderen, type Keuze } from "../../lib/automatisch.js";
 import { leesTelefoon, slaTelefoonOp, zichtbareTelefoons, waLink, toonNummer } from "../../lib/telefoon.js";
 import { verstuurTestmail } from "../../lib/mail.js";
 // @ts-ignore - gedeelde planner-logica (CommonJS)
@@ -136,7 +136,7 @@ async function alleSpelers(user: Gebruiker, beheer: boolean) {
   // Alleen weken die nog niet voorbij zijn zijn relevant.
   const vanaf = plusDagen(vandaag(), -7);
   const [rijen, weken] = await Promise.all([
-    db.select().from(spelers).orderBy(spelers.naam),
+    db.select().from(spelers).where(eq(spelers.gast, false)).orderBy(spelers.naam),
     db.select().from(beschikbaarheid).where(gte(beschikbaarheid.week, vanaf)),
   ]);
   return rijen.map((s) => {
@@ -176,7 +176,7 @@ async function overzicht(req: Request) {
   if (req.headers.get("x-beheercode") !== beheer) return fout("Beheercode klopt niet.", 401);
   const vanaf = plusDagen(vandaag(), -7);
   const [rijen, weken] = await Promise.all([
-    db.select({ id: spelers.id, naam: spelers.naam }).from(spelers).orderBy(spelers.naam),
+    db.select({ id: spelers.id, naam: spelers.naam }).from(spelers).where(eq(spelers.gast, false)).orderBy(spelers.naam),
     db.select().from(beschikbaarheid).where(gte(beschikbaarheid.week, vanaf)),
   ]);
   return json({
@@ -201,7 +201,9 @@ async function allePartijen(user: Gebruiker, beheer: boolean) {
   const lijst = beheer
     ? alle.filter((p) => !p.geannuleerd)
     : alle.filter((p) => !p.geannuleerd).filter((p) => !!mij && (p.aangemaaktDoor === mij.id || rijen.some((r) => r.partijId === p.id && r.spelerId === mij.id && isActief(r))));
-  const namen = new Map((await db.select({ id: spelers.id, naam: spelers.naam }).from(spelers)).map((x) => [x.id, x.naam]));
+  const alleNamen = await db.select({ id: spelers.id, naam: spelers.naam, gast: spelers.gast }).from(spelers);
+  const namen = new Map(alleNamen.map((x) => [x.id, x.naam]));
+  const gasten = new Set(alleNamen.filter((x) => x.gast).map((x) => x.id));
   // 06-nummers: de database (row level security) bepaalt welke deze speler mag zien.
   const nummers = mij ? await zichtbareTelefoons(mij.id) : new Map<number, string>();
   const info = await partijInfo(lijst.map((p) => p.id));
@@ -210,7 +212,7 @@ async function allePartijen(user: Gebruiker, beheer: boolean) {
     const mijnRij = rijen.find((r) => r.partijId === p.id && r.spelerId === mij?.id);
     const toon = (r: (typeof rijen)[number]) => {
       const nr = r.status === "bevestigd" ? nummers.get(r.spelerId) : undefined;
-      return { naam: namen.get(r.spelerId) ?? "?", ik: r.spelerId === mij?.id, status: r.status, boekt: !!p.boekerId && r.spelerId === p.boekerId, id: r.spelerId, betaald: r.betaald,
+      return { naam: namen.get(r.spelerId) ?? "?", ik: r.spelerId === mij?.id, status: r.status, boekt: !!p.boekerId && r.spelerId === p.boekerId, id: r.spelerId, betaald: r.betaald, gast: gasten.has(r.spelerId),
         ...(nr ? { telefoon: toonNummer(nr), whatsapp: waLink(nr) } : {}),
         ...(r.status === "uitgenodigd" ? { reactieTot: reactieTotVan(r, p) } : {}) };
     };
@@ -303,9 +305,14 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
     return r.ok ? json({ ok: true, tekst: r.tekst }) : fout(r.fout, r.status);
   } else if (actie === "kandidaten") {
     return json({ kandidaten: await kandidatenVoor(id) });
-  } else if (actie === "beheerkandidaten" || actie === "beheertoevoegen" || actie === "beheerverwijderen") {
+  } else if (actie === "beheerkandidaten" || actie === "beheertoevoegen" || actie === "beheerverwijderen" || actie === "beheergast") {
     if (!beheer) return fout("Alleen de beheerder kan spelers toevoegen of eruit halen.", 403);
     if (actie === "beheerkandidaten") return json({ kandidaten: await beheerKandidaten(id) });
+    if (actie === "beheergast") {
+      if (typeof b.naam !== "string") return fout("Vul de naam van de gastspeler in.");
+      const r = await beheerGastToevoegen(id, b.naam);
+      return r.ok ? json({ ok: true, tekst: r.tekst }) : fout(r.fout, r.status);
+    }
     const spelerId = Number(b.spelerId);
     if (!Number.isInteger(spelerId)) return fout("Onbekende speler.");
     const r = actie === "beheertoevoegen" ? await beheerToevoegen(id, spelerId) : await beheerVerwijderen(id, spelerId);
@@ -521,7 +528,7 @@ export default async (req: Request) => {
       return r.ok ? json({ ok: true, tekst: `Testmail verstuurd naar ${user.email} via ${r.manier}. Kijk ook even in je spam.` }) : fout(r.fout, 502);
     }
     if (pad === "/api/account" && req.method === "DELETE") { verifyRequestOrigin(req); return await verwijderAccount(user); }
-    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|betaald|nietbetaald|keuze|voorstel|kandidaten|beheerkandidaten|beheertoevoegen|beheerverwijderen)$/.exec(pad);
+    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|betaald|nietbetaald|keuze|voorstel|kandidaten|beheerkandidaten|beheertoevoegen|beheerverwijderen|beheergast)$/.exec(pad);
     if (m && req.method === "POST") return await wijzigPartij(user, m[1], await leesBody(req), isBeheer(req));
     return fout("Niet gevonden.", 404);
   } catch (e) {

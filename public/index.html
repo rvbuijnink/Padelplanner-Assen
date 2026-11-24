@@ -1220,17 +1220,21 @@
           try {
             const r = await fetch('/api/partijen/beheerkandidaten', { method: 'POST', headers: headers({ 'content-type': 'application/json' }), body: JSON.stringify({ id: p.id }) });
             const d = await r.json();
-            (d.kandidaten || []).forEach((k) => erin.append(h('option', { value: k.id }, k.naam + (k.afgezegd ? ' (had afgezegd)' : '') + (k.alOpDag ? ' (speelt die dag al elders)' : ''))));
+            (d.kandidaten || []).forEach((k) => erin.append(h('option', { value: k.id }, k.naam + (k.gast ? ' (gast)' : '') + (k.afgezegd ? ' (had afgezegd)' : '') + (k.alOpDag ? ' (speelt die dag al elders)' : ''))));
           } catch (e) {}
           erinRij.hidden = false;
         });
+        const gastNaam = h('input', { type: 'text', maxlength: '60', placeholder: 'Naam gastspeler', 'aria-label': 'Naam gastspeler' });
+        const gastRij = h('div', { class: 'boekrij' }, gastNaam, knop('Gastspeler toevoegen', 'rustig', () => {
+          if (gastNaam.value.trim()) doe('/beheergast', { naam: gastNaam.value.trim() });
+        }));
         blokken.push(h('details', { class: 'beheervak' }, h('summary', {}, 'Beheer: spelers wisselen'),
-          h('div', { class: 'hint' }, 'Er gaat geen e-mail uit. Wie je toevoegt, staat meteen op bevestigd; wie je eruit haalt, wordt niet opnieuw voor deze partij uitgenodigd.'),
+          h('div', { class: 'hint' }, 'Er gaat geen e-mail uit. Wie je toevoegt, staat meteen op bevestigd; wie je eruit haalt, wordt niet opnieuw voor deze partij uitgenodigd. Een gastspeler heeft alleen een naam nodig (geen 06-nummer of speelsterkte).'),
           wie.length ? h('div', { class: 'boekrij' }, eruit, knop('Eruit halen', 'rustig', () => {
             const naam = eruit.selectedOptions[0] && eruit.selectedOptions[0].textContent;
             if (eruit.value && confirm(naam + ' uit deze partij halen? Er gaat geen e-mail uit.')) doe('/beheerverwijderen', { spelerId: Number(eruit.value) });
           })) : null,
-          h('div', {}, laadErin), erinRij));
+          h('div', {}, laadErin), erinRij, gastRij));
       }
 
       if (p.vanMij || isBeheerder) knoppen.push(knop('Partij verwijderen', 'link', () => { if (confirm('Deze partij verwijderen? Iedereen die erbij staat wordt afgemeld (zonder e-mail).')) doe('/verwijderen'); }));
@@ -1240,7 +1244,7 @@
         : p.compleet ? h('span', { class: 'badge' }, '4 van 4 bevestigd · gaat door')
         : drie ? h('span', { class: 'badge' }, 'gaat door met drie')
         : h('span', { class: 'badge rood' }, bevestigd + ' van 4 bevestigd');
-      const spelerRij = (d) => h('li', {}, d.ik ? h('strong', {}, d.naam + ' (jij)') : h('span', {}, d.naam),
+      const spelerRij = (d) => h('li', {}, d.ik ? h('strong', {}, d.naam + ' (jij)') : h('span', {}, d.naam + (d.gast ? ' (gast)' : '')),
         d.status === 'bevestigd' ? h('span', { class: 'sp-ok' }, ' ✓ bevestigd') : d.status === 'gepland' ? h('span', { class: 'sp-wacht' }, ' · uitnodiging na het boeken') : h('span', { class: 'sp-wacht' }, ' … nog niet bevestigd' + (d.reactieTot ? ' (tot ' + klok(d.reactieTot) + ')' : '')),
         d.boekt ? h('span', { class: 'hint' }, ' · boeker') : null,
         d.telefoon && !d.ik ? h('span', { class: 'nummer' }, h('a', { href: 'tel:' + d.telefoon.replace(/-/g, '') }, d.telefoon), h('a', { class: 'wa', href: d.whatsapp, target: '_blank', rel: 'noopener' }, 'Stuur bericht via WhatsApp')) : null,
