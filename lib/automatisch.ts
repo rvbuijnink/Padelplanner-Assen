@@ -572,6 +572,7 @@ export async function beantwoord(partijId: number, spelerId: number, ja: boolean
     if (!ctx.metTelefoon.has(s.id)) return { ok: false, fout: "Vul eerst je 06-nummer in bij Vaste instellingen. Dat is nodig om een partij te bevestigen; alleen je bevestigde medespelers zien het.", status: 409 };
     if (rij?.status === "gepland") return { ok: true, tekst: p.boekerId === s.id ? "Jij boekt de baan. Geboekt? Druk op de partijpagina op \"Baan is geboekt\"." : "De baan wordt eerst geboekt. Daarna krijg je een uitnodiging." };
     if (rij?.status === "bevestigd") return { ok: true, tekst: "Je had al bevestigd. Tot dan!", betaallink: p.betaallink, bedrag: bedragPP(ctx, p) };
+    if (rij?.status === "verwijderd") return { ok: false, fout: "De beheerder heeft je uit deze partij gehaald.", status: 409 };
     if (rij?.status === "uitgenodigd") {
       await zetStatus(p, s.id, "bevestigd");
       tekst = "Top, je doet mee!";
@@ -701,6 +702,47 @@ export async function stelVoor(partijId: number, doorId: number, kandidaatId: nu
   if (m) mails.push(m);
   await verstuur(mails);
   return { ok: true, tekst: `${k.naam} is uitgenodigd${kanMail(k) ? " per e-mail" : " (en ziet het op de site)"}.` };
+}
+
+// ---- Beheerder: spelers handmatig aan een partij toevoegen of eruit halen (zonder e-mail) ----
+export async function beheerKandidaten(partijId: number) {
+  const ctx = await laad();
+  const p = ctx.partijen.find((x) => x.id === partijId);
+  if (!p) return [];
+  return ctx.spelers
+    .filter((s) => !p.rijen.some((r) => r.spelerId === s.id && isActief(r)))
+    .map((s) => ({ id: s.id, naam: s.naam, afgezegd: p.rijen.some((r) => r.spelerId === s.id && r.status === "afgezegd"), alOpDag: speeltAlOpDag(ctx, s.id, p.datum, p.id) }))
+    .sort((a, b) => a.naam.localeCompare(b.naam));
+}
+export async function beheerToevoegen(partijId: number, spelerId: number): Promise<Antwoord> {
+  const ctx = await laad();
+  const p = ctx.partijen.find((x) => x.id === partijId);
+  if (!p || p.geannuleerd || startVan(p) < Date.now()) return { ok: false, fout: "Deze partij bestaat niet (meer).", status: 404 };
+  const s = spelerVan(ctx, spelerId);
+  if (!s) return { ok: false, fout: "Onbekende speler.", status: 404 };
+  const rij = p.rijen.find((r) => r.spelerId === s.id);
+  if (rij?.status === "bevestigd") return { ok: true, tekst: `${s.naam} stond al bevestigd bij deze partij.` };
+  // Een bestaande rij houdt zijn oorspronkelijke aanmeldmoment, zodat de speler zijn plek in de volgorde terugkrijgt.
+  const waarden = { status: "bevestigd", aangemeld: rij?.aangemeld ? new Date(rij.aangemeld) : new Date(), token: rij?.token ?? randomBytes(18).toString("base64url"), reactieTot: null };
+  await db.insert(partijDeelnemers).values({ partijId: p.id, spelerId: s.id, ...waarden })
+    .onConflictDoUpdate({ target: [partijDeelnemers.partijId, partijDeelnemers.spelerId], set: waarden });
+  const rijen = await db.select().from(partijDeelnemers).where(eq(partijDeelnemers.partijId, p.id));
+  const reserve = !vierVan({ ...p, rijen }).some((r) => r.spelerId === s.id);
+  return { ok: true, tekst: `${s.naam} is als bevestigd aan de partij toegevoegd (zonder e-mail).` + (reserve ? " De partij was al vol, dus deze speler staat op de reservelijst." : "") + (speeltAlOpDag(ctx, s.id, p.datum, p.id) ? ` Let op: ${s.naam} staat die dag ook bij een andere partij.` : "") };
+}
+export async function beheerVerwijderen(partijId: number, spelerId: number): Promise<Antwoord> {
+  const ctx = await laad();
+  const p = ctx.partijen.find((x) => x.id === partijId);
+  if (!p || p.geannuleerd || startVan(p) < Date.now()) return { ok: false, fout: "Deze partij bestaat niet (meer).", status: 404 };
+  const s = spelerVan(ctx, spelerId);
+  const rij = p.rijen.find((r) => r.spelerId === spelerId);
+  if (!s || !rij || !isActief(rij)) return { ok: true, tekst: "Deze speler stond al niet (meer) bij deze partij." };
+  const speeldeMee = vierVan(p).some((r) => r.spelerId === spelerId) && rij.status === "bevestigd";
+  // "verwijderd": niet opnieuw voor deze partij uitgenodigd, maar die dag wel gewoon in te plannen bij een andere partij.
+  await zetStatus(p, spelerId, "verwijderd");
+  if (speeldeMee && p.compleetGemeld) await zetPartij(p, { compleetGemeld: false });
+  if (p.boekerId === spelerId && !p.geboekt) await zetPartij(p, { boekerId: null, afgewezenBoekers: [...(p.afgewezenBoekers ?? []), spelerId] });
+  return { ok: true, tekst: `${s.naam} is uit de partij gehaald (zonder e-mail).` + (p.boekerId === spelerId ? ` ${s.naam} blijft als boeker staan; de baan staat op die naam.` : "") };
 }
 
 // ---- Nieuwe partijen zoeken ----

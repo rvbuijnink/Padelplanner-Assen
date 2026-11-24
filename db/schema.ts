@@ -109,6 +109,7 @@ export const partijDeelnemers = pgTable(
     aangemeld: timestamp("aangemeld", { withTimezone: true }).notNull().defaultNow(),
     // "gepland" (gekozen, wacht tot de baan geboekt is; nog niet uitgenodigd), "uitgenodigd" (wacht op antwoord), "bevestigd", "afgezegd", "verlopen" (niet op tijd gereageerd)
     // of "geannuleerd" (de partij ging niet door; deze speler kan die dag gewoon opnieuw worden ingepland).
+    // of "verwijderd" (door de beheerder eruit gehaald; niet opnieuw voor deze partij uitgenodigd, die dag wel elders in te plannen).
     status: text().notNull().default("bevestigd"),
     // Geheime sleutel voor de knoppen in de e-mail (bevestigen zonder inloggen).
     token: text().unique(),
