@@ -493,13 +493,14 @@ async function werkBij(ctx: Context, p: Partij, mails: Mail[], laatste?: number)
     let b = boeker;
     if (!b) {
       // Oude partijen: wie als laatste bevestigde boekt, anders wie het minst boekte.
-      b = vier.find((s) => s.id === laatste) ?? vier.slice().sort((x, y) => keerGeboekt(ctx, x) - keerGeboekt(ctx, y) || x.id - y.id)[0];
+      const kunnen = vier.filter((s) => !s.gast);
+      b = kunnen.find((s) => s.id === laatste) ?? kunnen.slice().sort((x, y) => keerGeboekt(ctx, x) - keerGeboekt(ctx, y) || x.id - y.id)[0];
     }
-    const gelukt = await db.update(partijen).set({ compleetGemeld: true, boekerId: b.id })
+    const gelukt = await db.update(partijen).set({ compleetGemeld: true, boekerId: b?.id ?? null })
       .where(and(eq(partijen.id, p.id), eq(partijen.compleetGemeld, false))).returning({ id: partijen.id });
     if (!gelukt.length) return;
     p.compleetGemeld = true;
-    p.boekerId = b.id;
+    p.boekerId = b?.id ?? null;
     mails.push(...gaatDoor(ctx, p, vier, b));
   }
 }
@@ -724,14 +725,39 @@ export async function beheerToevoegen(partijId: number, spelerId: number): Promi
   const s = spelerVan(ctx, spelerId);
   if (!s) return { ok: false, fout: "Onbekende speler.", status: 404 };
   const rij = p.rijen.find((r) => r.spelerId === s.id);
-  if (rij?.status === "bevestigd") return { ok: true, tekst: `${s.naam} stond al bevestigd bij deze partij.` };
-  // Een bestaande rij houdt zijn oorspronkelijke aanmeldmoment, zodat de speler zijn plek in de volgorde terugkrijgt.
-  const waarden = { status: "bevestigd", aangemeld: rij?.aangemeld ? new Date(rij.aangemeld) : new Date(), token: rij?.token ?? randomBytes(18).toString("base64url"), reactieTot: null };
-  await db.insert(partijDeelnemers).values({ partijId: p.id, spelerId: s.id, ...waarden })
-    .onConflictDoUpdate({ target: [partijDeelnemers.partijId, partijDeelnemers.spelerId], set: waarden });
-  const rijen = await db.select().from(partijDeelnemers).where(eq(partijDeelnemers.partijId, p.id));
-  const reserve = !vierVan({ ...p, rijen }).some((r) => r.spelerId === s.id);
-  return { ok: true, tekst: `${s.naam} is als bevestigd aan de partij toegevoegd (zonder e-mail).` + (reserve ? " De partij was al vol, dus deze speler staat op de reservelijst." : "") + (speeltAlOpDag(ctx, s.id, p.datum, p.id) ? ` Let op: ${s.naam} staat die dag ook bij een andere partij.` : "") };
+  // Stond de speler al bevestigd (bijvoorbeeld op de reservelijst), dan alleen de volgorde en de stand bijwerken.
+  const alBevestigd = rij?.status === "bevestigd";
+  if (!alBevestigd) {
+    // Een bestaande rij houdt zijn oorspronkelijke aanmeldmoment, zodat de speler zijn plek in de volgorde terugkrijgt.
+    const waarden = { status: "bevestigd", aangemeld: rij?.aangemeld ? new Date(rij.aangemeld) : new Date(), token: rij?.token ?? randomBytes(18).toString("base64url"), reactieTot: null };
+    await db.insert(partijDeelnemers).values({ partijId: p.id, spelerId: s.id, ...waarden })
+      .onConflictDoUpdate({ target: [partijDeelnemers.partijId, partijDeelnemers.spelerId], set: waarden });
+    p.rijen = await db.select().from(partijDeelnemers).where(eq(partijDeelnemers.partijId, p.id));
+  }
+  // Een door de beheerder toegevoegde (bevestigde) speler gaat vóór spelers die nog niet bevestigd hebben:
+  // hij neemt de plek in van de laatste onbevestigde speler bij de vier; die schuift door naar de reservelijst.
+  let verschoven: Speler | undefined;
+  if (!vierVan(p).some((r) => r.spelerId === s.id)) {
+    const plek = vierVan(p).filter((r) => r.status !== "bevestigd").pop();
+    if (plek) {
+      await db.update(partijDeelnemers).set({ aangemeld: new Date(plek.aangemeld) })
+        .where(and(eq(partijDeelnemers.partijId, p.id), eq(partijDeelnemers.spelerId, s.id)));
+      await db.update(partijDeelnemers).set({ aangemeld: new Date() })
+        .where(and(eq(partijDeelnemers.partijId, p.id), eq(partijDeelnemers.spelerId, plek.spelerId)));
+      verschoven = spelerVan(ctx, plek.spelerId);
+      p.rijen = await db.select().from(partijDeelnemers).where(eq(partijDeelnemers.partijId, p.id));
+    }
+  }
+  const reserve = !vierVan(p).some((r) => r.spelerId === s.id);
+  // Meteen bijwerken: is de partij nu compleet, dan wordt dat vastgelegd en krijgen de spelers de "gaat door"-mail.
+  const mails: Mail[] = [];
+  await werkBij(ctx, p, mails);
+  await verstuur(mails);
+  return { ok: true, tekst: (alBevestigd ? `${s.naam} stond al bevestigd bij deze partij.` : `${s.naam} is als bevestigd aan de partij toegevoegd (zonder e-mail).`) +
+    (reserve ? " De partij was al vol, dus deze speler staat op de reservelijst." : "") +
+    (verschoven ? ` ${verschoven.naam} had nog niet bevestigd en staat nu op de reservelijst.` : "") +
+    (!reserve && isCompleet(p) ? " De partij is nu compleet." : "") +
+    (speeltAlOpDag(ctx, s.id, p.datum, p.id) ? ` Let op: ${s.naam} staat die dag ook bij een andere partij.` : "") };
 }
 // Gastspeler: alleen een naam. Bestaat er al een gast met die naam, dan wordt die opnieuw gebruikt.
 export async function beheerGastToevoegen(partijId: number, naam: string): Promise<Antwoord> {
