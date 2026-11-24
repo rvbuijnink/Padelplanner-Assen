@@ -671,12 +671,12 @@ export async function boekerKeuze(partijId: number, spelerId: number, keuze: Keu
     if (!(await wijsBoekerAan(ctx, p, mails))) await annuleer(ctx, p, mails, "Er was niemand die de baan kon boeken.");
     tekst = p.geannuleerd ? "Er is niemand anders die wil boeken, dus de partij gaat niet door." : `${spelerVan(ctx, p.boekerId)?.naam} is gevraagd de baan te boeken. Jij speelt gewoon mee.`;
   } else if (keuze === "bezet") {
-    // De baan bleek bij de club al bezet: boeken lukt niet, dus de partij gaat niet door. Alle spelers krijgen een mail.
+    // De baan bleek bij de club al bezet: boeken lukt niet, dus de partij gaat niet door. Alleen spelers die al een uitnodiging hadden krijgen een mail; de rest wist nog van niets.
     if (p.geboekt) return { ok: false, fout: "De baan staat al op geboekt. Kies dan \"Partij annuleren\".", status: 409 };
     const club = clubVan(ctx, p.clubId);
     await zetPartij(p, { besluit: "bezet" });
-    await annuleer(ctx, p, mails, `${beheer && p.boekerId !== spelerId ? "De beheerder meldt" : `${boeker?.naam ?? "De boeker"} meldt`} dat de baan bij ${club.naam} al bezet was, dus boeken lukte niet.`, true);
-    tekst = "De partij is geannuleerd. De andere spelers krijgen een mail dat de baan al bezet was.";
+    await annuleer(ctx, p, mails, `${beheer && p.boekerId !== spelerId ? "De beheerder meldt" : `${boeker?.naam ?? "De boeker"} meldt`} dat de baan bij ${club.naam} al bezet was, dus boeken lukte niet.`);
+    tekst = "De partij is geannuleerd. Spelers die al een uitnodiging hadden, krijgen een mail dat de baan al bezet was.";
   } else if (keuze === "zoeken") {
     await zetPartij(p, { besluit: "zoeken" });
     mails.push(...bericht(ctx, p, bevestigdVan(p).map((r) => r.spelerId).filter((id) => id !== p.boekerId), `We zoeken een vervanger (${dagTekst(p.datum)})`, () =>
