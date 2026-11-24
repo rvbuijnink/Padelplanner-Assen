@@ -120,8 +120,8 @@
   .planform { margin-top:8px; }
   .badge { display:inline-block; font-size:.72rem; font-weight:600; padding:2px 9px; border-radius:99px; background:color-mix(in srgb, var(--goed) 14%, transparent); color:var(--goed); margin-left:6px; vertical-align:middle; }
   .let { color:var(--let); }
-  .moment.st-open-partij { background:color-mix(in srgb, var(--fout) 9%, var(--card)); border-color:color-mix(in srgb, var(--fout) 30%, var(--lijn)); border-left-color:var(--fout); }
-  .moment.st-gepland { background:color-mix(in srgb, #e8892b 12%, var(--card)); border-color:color-mix(in srgb, #e8892b 35%, var(--lijn)); border-left-color:#e8892b; }
+  .moment.st-gepland { background:color-mix(in srgb, var(--fout) 9%, var(--card)); border-color:color-mix(in srgb, var(--fout) 30%, var(--lijn)); border-left-color:var(--fout); }
+  .moment.st-open-partij { background:color-mix(in srgb, #e8892b 12%, var(--card)); border-color:color-mix(in srgb, #e8892b 35%, var(--lijn)); border-left-color:#e8892b; }
   .moment.st-mee { border-left-color:var(--accent); background:color-mix(in srgb, var(--accent) 6%, var(--card)); border-color:color-mix(in srgb, var(--accent) 25%, var(--lijn)); }
   .moment.st-geboekt { background:color-mix(in srgb, var(--goed) 11%, var(--card)); border-color:color-mix(in srgb, var(--goed) 30%, var(--lijn)); border-left-color:var(--goed); }
   .nummer { display:inline-flex; align-items:center; gap:6px; margin-left:6px; font-variant-numeric:tabular-nums; }
@@ -170,13 +170,10 @@
   .ankers a:hover { text-decoration:underline; }
   .ankers a[hidden] { display:none; }
   #paneel-planning > section { scroll-margin-top:70px; }
-  details.deel > summary { list-style:none; cursor:pointer; display:block; position:relative; padding-right:34px; }
-  details.deel > summary::-webkit-details-marker { display:none; }
-  details.deel > summary::after { content:'▾'; position:absolute; right:4px; top:2px; font-size:1.2rem; color:var(--accent); transition:transform .15s; }
-  details.deel:not([open]) > summary::after { transform:rotate(-90deg); }
-  details.deel > summary h2 { display:inline; margin:0; }
-  details.deel > summary .deel-sub { display:block; font-size:.88rem; font-weight:400; opacity:.75; margin-top:2px; }
-  details.deel[open] > summary { margin-bottom:14px; }
+  .deel-kop { margin-bottom:14px; }
+  .deel-kop h2 { margin:0; }
+  .deel-kop .deel-sub { display:block; font-size:.88rem; font-weight:400; opacity:.75; margin-top:2px; }
+  .ankers a.opvallend { background:var(--bal); color:#1a1a1a; }
   details.inklap > summary { cursor:pointer; font-weight:600; color:var(--accent); margin-bottom:8px; }
   details.standaardweek { padding:12px 14px; border:1px solid var(--lijn); border-radius:12px; background:var(--veld); margin-bottom:14px; }
   .st-standaard { color:var(--accent); }
@@ -453,48 +450,48 @@
   <div class="paneel" id="paneel-planning" hidden>
     <nav class="ankers" aria-label="Op deze pagina">
       <span class="ankers-kop">Op deze pagina:</span>
-      <a href="#deel-partijen">📅 Jouw partijen</a>
-      <a href="#deel-open" id="anker-open">🙋 Speel mee: er mist 1 speler</a>
+      <a href="#deel-partijen">📅 Mijn geplande partijen</a>
+      <a href="#deel-open" id="anker-open">⚡ Partijen met nog 1 plekje: reageer snel!</a>
       <a href="#deel-banen">🎾 Vrije banen in Assen e.o.</a>
-      <a href="#deel-uitleg">❓ Hoe werkt het?</a>
+      <a href="#deel-uitleg" class="opvallend">❓ Hoe werkt het?</a>
     </nav>
 
     <section id="deel-partijen">
-      <details class="deel" open>
-        <summary><h2>Jouw partijen</h2><span class="deel-sub">Partijen waarvoor je bent ingepland of uitgenodigd</span></summary>
+      <div class="deel">
+        <div class="deel-kop"><h2>Mijn geplande partijen</h2><span class="deel-sub">Partijen waarvoor je bent ingepland of uitgenodigd</span></div>
         <div class="startlijst" id="startlijst" hidden>
           <strong>Zo begin je</strong>
           <ol id="startlijst-stappen"></ol>
         </div>
         <div class="uitleg">
           <ul class="kleuren" aria-label="Kleuren">
-            <li>🟠 <strong>Oranje:</strong> match gevonden, de baan wordt geboekt.</li>
-            <li>🔴 <strong>Rood:</strong> baan geboekt, wacht op bevestigingen.</li>
-            <li>🟢 <strong>Groen:</strong> alle vier bevestigd, gaat door.</li>
+            <li>🔴 <strong>Rood:</strong> partij is gepland, de baan moet nog worden geboekt.</li>
+            <li>🟠 <strong>Oranje:</strong> baan is geboekt, wacht op bevestiging van de spelers.</li>
+            <li>🟢 <strong>Groen:</strong> 4 spelers gevonden, partij gaat door.</li>
           </ul>
           <p>Je ziet hier alleen de partijen waar je zelf bij hoort; de beheerder ziet alle partijen.</p>
         </div>
         <p class="melding" id="partijen-info" role="status"></p>
         <div id="partijen"></div>
         <button type="button" class="rustig" id="ververs">Vernieuw</button>
-      </details>
+      </div>
     </section>
 
     <section id="deel-open" hidden>
-      <details class="deel" open>
-        <summary><h2>Speel mee: er mist nog 1 speler</h2><span class="deel-sub">Wil je extra spelen? Sluit aan bij drie spelers die al kunnen</span></summary>
+      <div class="deel">
+        <div class="deel-kop"><h2>Partijen met nog 1 plekje: reageer snel!</h2><span class="deel-sub">Wil je extra spelen? Sluit aan bij drie spelers die al kunnen</span></div>
         <div class="uitleg">
           <p><strong>Wat is dit?</strong> Hier staan momenten waarop al <strong>drie spelers</strong> van ongeveer jouw speelsterkte kunnen en er <strong>nu een baan vrij is</strong>. Alleen de vierde speler ontbreekt nog. Dit is een aanbod: je hoeft niets te doen als je niet wilt.</p>
-          <p style="margin-top:6px"><strong>Wat moet je doen?</strong> Lijkt een moment je leuk? Klik op <em>Ik speel mee en boek de baan</em>. Jij boekt dan de baan bij de club, daarna krijgen de andere drie spelers hun uitnodiging. Je ziet vooraf wie er meedoen en hun speelsterkte (tot 0,5 buiten de ingestelde niveaus).</p>
+          <p style="margin-top:6px"><strong>Wat moet je doen?</strong> Lijkt een moment je leuk? Klik op <em>Ik speel mee en boek de baan</em>. Jij boekt dan de baan bij de club, daarna krijgen de andere drie spelers hun uitnodiging. Je ziet vooraf wie er meedoen en wat hun speelsterkte is. Die kan tot 0,5 afwijken van de niveaus die jij of de anderen hebben ingesteld.</p>
         </div>
         <p class="melding" id="open-info" role="status"></p>
         <div id="open-partijen"></div>
-      </details>
+      </div>
     </section>
 
     <section id="deel-banen">
-      <details class="deel" open>
-        <summary><h2>Vrije banen in Assen e.o.</h2><span class="deel-sub">Overzicht van alle padelclubs in en rondom Assen</span></summary>
+      <div class="deel">
+        <div class="deel-kop"><h2>Vrije banen in Assen e.o.</h2><span class="deel-sub">Overzicht van alle padelclubs in en rondom Assen</span></div>
         <p class="hint" style="margin-top:0">Dit is een overzicht van <strong>alle padelclubs in en rondom Assen</strong>, los van je partijen. Kies een dag en tijd en je ziet per club of er een baan vrij is en wat die kost. Handig als je zelf een baan wilt boeken of wilt zien waar nog plek is.</p>
         <div class="rij">
           <div><label for="kies-dag"><strong>Dag</strong></label><select id="kies-dag"></select></div>
@@ -504,12 +501,12 @@
         <div class="scroll"><table class="banen" id="banen"></table></div>
         <p class="hint">De goedkoopste boekbare club is gemarkeerd.</p>
         <p><a class="knop rustig" id="padelchecker" target="_blank" rel="noopener">Vergelijk vrije banen op Padelchecker ↗</a></p>
-      </details>
+      </div>
     </section>
 
     <section id="deel-uitleg">
-      <details class="deel">
-        <summary><h2>Hoe werkt het?</h2><span class="deel-sub">Van plannen tot spelen in vijf stappen (klik om uit te klappen)</span></summary>
+      <div class="deel">
+        <div class="deel-kop"><h2>Hoe werkt het?</h2><span class="deel-sub">Van plannen tot spelen in vijf stappen</span></div>
         <div class="uitleg" style="margin:0">
         <ol class="stappen">
           <li><span class="nr">1.</span><div><strong>Plannen.</strong> Elk uur tussen 08:00 en 17:00 zoekt de site vier spelers die passen bij elkaars beschikbaarheid en instellingen. De site kijkt daarbij 7 tot 31 dagen vooruit bij de vijf clubs in en rondom Assen. Geen vrije baan? Dan geen partij.</div></li>
@@ -519,7 +516,7 @@
           <li><span class="nr">5.</span><div><strong>Afzeggen.</strong> Kun je niet meer? Klik op de website bij je partij op 'Ik kan niet meer'. Tot 72 uur vooraf zoekt de site een vervanger, daarna beslist de boeker of de partij doorgaat. Binnen 48 uur is de baan vaak niet meer kosteloos te annuleren; zeg je binnen 48 uur af, dan moet je zelf een vervanger zoeken. Neem zo snel mogelijk via WhatsApp contact op om je medespelers te vragen of zij een vervanger weten.</div></li>
         </ol>
         </div>
-      </details>
+      </div>
     </section>
   </div>
 
@@ -1288,10 +1285,10 @@
       if (p.vanMij || isBeheerder) knoppen.push(knop('Partij verwijderen', 'link', () => { if (confirm('Deze partij verwijderen? Iedereen die erbij staat wordt afgemeld (zonder e-mail).')) doe('/verwijderen'); }));
 
       const stand = p.geboekt ? (p.compleet || drie ? 'geboekt' : 'open') : 'gepland';
-      const badge = !p.geboekt ? h('span', { class: 'badge oranje' }, 'baan wordt geboekt')
+      const badge = !p.geboekt ? h('span', { class: 'badge rood' }, 'gepland · baan wordt geboekt')
         : p.compleet ? h('span', { class: 'badge' }, '4 van 4 bevestigd · gaat door')
         : drie ? h('span', { class: 'badge' }, 'gaat door met drie')
-        : h('span', { class: 'badge rood' }, bevestigd + ' van 4 bevestigd');
+        : h('span', { class: 'badge oranje' }, 'baan geboekt · ' + bevestigd + ' van 4 bevestigd');
       const statusCel = (d) => d.status === 'bevestigd' ? h('span', { class: 'sp-ok' }, '✓ bevestigd')
         : d.status === 'gepland' ? h('span', { class: 'sp-wacht' }, 'uitnodiging na het boeken')
         : h('span', { class: 'sp-wacht' }, 'nog niet bevestigd' + (d.reactieTot ? ' (tot ' + klok(d.reactieTot) + ')' : ''));
@@ -1696,13 +1693,11 @@
     m.className = 'melding' + (code ? (isBeheerder ? ' ok' : ' fout') : '');
   });
   $('ververs').addEventListener('click', async () => { liveCache.clear(); await Promise.all([laadSpelers(), laadPartijen()]); toonPartijen(); toonPlanner(); toonBanen(); laadOpenPartijen(); });
-  // Ankers bovenaan Geplande partijen: klap het gekozen deel open en scroll erheen.
+  // Links bovenaan Geplande partijen: scroll naar het gekozen deel.
   document.querySelectorAll('.ankers a[href^="#"]').forEach((a) => a.addEventListener('click', (e) => {
     const doel = document.querySelector(a.getAttribute('href'));
     if (!doel) return;
     e.preventDefault();
-    const d = doel.querySelector('details.deel');
-    if (d) d.open = true;
     doel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }));
   $('kies-dag').addEventListener('change', toonBanen);
