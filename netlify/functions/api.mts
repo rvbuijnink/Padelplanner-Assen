@@ -14,7 +14,7 @@
 // GET  /api/agenda?t=...     -> agenda-afspraak (.ics) van een partij, via de sleutel uit de e-mail
 // GET  /api/partijen/open    -> momenten waarop drie passende spelers kunnen en live een baan vrij is (ingelogd)
 // POST /api/partijen/meedoen { datum, tijd, duur, clubId, spelers } -> "Ik speel mee en boek de baan"
-// GET  /api/partijen/gat     -> geboekte partijen waar nog één speler ontbreekt: alle voor de beheerder, anders alleen waar jij past (ingelogd)
+// GET  /api/partijen/gat     -> geboekte partijen waar nog één speler ontbreekt: alleen voor de beheerder
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { getUser, verifyRequestOrigin, AuthError, admin } from "@netlify/identity";
 import { db } from "../../db/index.js";
@@ -518,9 +518,8 @@ export default async (req: Request) => {
       return json(mij ? await openPartijenVoor(mij.id) : { partijen: [] });
     }
     if (pad === "/api/partijen/gat" && req.method === "GET") {
-      const beheer = isBeheer(req);
-      const mij = await mijnSpeler(user);
-      return json({ partijen: await partijenMetGat(mij?.id ?? null, beheer), beheer });
+      if (!isBeheer(req)) return fout("Beheercode klopt niet.", 401);
+      return json({ partijen: await partijenMetGat(null, true), beheer: true });
     }
     if (pad === "/api/partijen/meedoen" && req.method === "POST") {
       const mij = await mijnSpeler(user);
