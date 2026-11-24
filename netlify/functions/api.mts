@@ -9,6 +9,7 @@
 // POST /api/partijen/geboekt { id, link? } -> baan geboekt; de anderen krijgen een mail (met Tikkie als die er is)
 // POST /api/partijen/betaallink { id, link }  -> wie boekt deelt (later) een Tikkie; de anderen krijgen die per mail
 // POST /api/partijen/deurcode { id, code }    -> wie boekt deelt (later) de deurcode (Valley, Rolde); de anderen krijgen die per mail
+// POST /api/partijen/gegevens { id, link, code } -> na het boeken Tikkie en deurcode samen bijwerken; de anderen krijgen één mail
 // Bij /geboekt kan ook { code } mee: de deurcode gaat dan mee in dezelfde mail als de Tikkie en de bevestiging.
 // POST /api/partijen/betaald | /nietbetaald { id, spelerId } -> bijhouden wie zijn deel heeft betaald
 // GET  /api/antwoord?t=...   -> gegevens van een uitnodiging uit de e-mail (geen inlog nodig, de sleutel is genoeg)
@@ -20,7 +21,7 @@
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { getUser, verifyRequestOrigin, AuthError, admin } from "@netlify/identity";
 import { db } from "../../db/index.js";
-import { beantwoord, markeerGeboekt, meldBetaallink, meldDeurcode, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, openPartijenVoor, speelMeeEnBoek, beheerKandidaten, beheerToevoegen, beheerGastToevoegen, beheerVerwijderen, partijenMetGat, type Keuze } from "../../lib/automatisch.js";
+import { beantwoord, markeerGeboekt, meldBetaallink, meldDeurcode, meldGegevens, zoekUitnodiging, spelendVan, isActief, agendaVoor, boekerKeuze, kandidatenVoor, stelVoor, partijInfo, reactieTotVan, openPartijenVoor, speelMeeEnBoek, beheerKandidaten, beheerToevoegen, beheerGastToevoegen, beheerVerwijderen, partijenMetGat, type Keuze } from "../../lib/automatisch.js";
 import { leesTelefoon, slaTelefoonOp, zichtbareTelefoons, waLink, toonNummer } from "../../lib/telefoon.js";
 import { verstuurTestmail } from "../../lib/mail.js";
 // @ts-ignore - gedeelde planner-logica (CommonJS)
@@ -267,6 +268,24 @@ async function wijzigPartij(user: Gebruiker, actie: string, b: any, beheer = fal
   if (actie === "aanmelden" || actie === "afmelden") {
     const r = await beantwoord(id, mij.id, actie === "aanmelden");
     return r.ok ? json({ ok: true, tekst: r.tekst, boeken: r.boeken, betaallink: r.betaallink, bedrag: r.bedrag }) : fout(r.fout, r.status);
+  } else if (actie === "gegevens") {
+    if (p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de beheerder) kan dit aanpassen.", 403);
+    const link = typeof b.link === "string" ? b.link.trim() : "";
+    if (link) {
+      let url: URL | null = null;
+      try { url = new URL(link); } catch {}
+      if (!url || url.protocol !== "https:" || link.length > 500) return fout("Plak een geldige betaallink (die begint met https://), of laat het veld leeg.");
+    }
+    const code = typeof b.code === "string" ? b.code.trim() : "";
+    if (code.length > 60) return fout("Deze deurcode is te lang.");
+    const set: { betaallink?: string | null; deurcode?: string | null } = {};
+    if ((link || null) !== p.betaallink) set.betaallink = link || null;
+    if (typeof b.code === "string" && (code || null) !== p.deurcode) set.deurcode = code || null;
+    if (!Object.keys(set).length) return json({ ok: true, tekst: "Er is niets veranderd." });
+    await db.update(partijen).set(set).where(eq(partijen.id, id));
+    const nieuw = (!!set.betaallink) || (!!set.deurcode);
+    if (p.geboekt && nieuw) await meldGegevens(id);
+    return json({ ok: true, tekst: nieuw && p.geboekt ? "De gegevens zijn opgeslagen. De andere spelers krijgen ze in één mail." : "De gegevens zijn opgeslagen." });
   } else if (actie === "deurcode") {
     if (p.boekerId !== mij.id && !beheer) return fout("Alleen wie de baan boekt (of de beheerder) kan de deurcode aanpassen.", 403);
     const code = typeof b.code === "string" ? b.code.trim() : "";
@@ -552,7 +571,7 @@ export default async (req: Request) => {
       return r.ok ? json({ ok: true, tekst: `Testmail verstuurd naar ${user.email} via ${r.manier}. Kijk ook even in je spam.` }) : fout(r.fout, 502);
     }
     if (pad === "/api/account" && req.method === "DELETE") { verifyRequestOrigin(req); return await verwijderAccount(user); }
-    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|deurcode|betaald|nietbetaald|keuze|voorstel|kandidaten|beheerkandidaten|beheertoevoegen|beheerverwijderen|beheergast)$/.exec(pad);
+    const m = /^\/api\/partijen\/(aanmelden|afmelden|verwijderen|geboekt|nietgeboekt|betaallink|deurcode|gegevens|betaald|nietbetaald|keuze|voorstel|kandidaten|beheerkandidaten|beheertoevoegen|beheerverwijderen|beheergast)$/.exec(pad);
     if (m && req.method === "POST") return await wijzigPartij(user, m[1], await leesBody(req), isBeheer(req));
     return fout("Niet gevonden.", 404);
   } catch (e) {
